@@ -2,10 +2,15 @@ package com.DeliveryInventoryService.DeliveryInventoryService.Service;
 
 import com.DeliveryInventoryService.DeliveryInventoryService.DTO.ApiResponse;
 import com.DeliveryInventoryService.DeliveryInventoryService.DTO.RiderSignupDTO;
+import com.DeliveryInventoryService.DeliveryInventoryService.DTO.RouteDTO;
+import com.DeliveryInventoryService.DeliveryInventoryService.DTO.RoutePointDTO;
 import com.DeliveryInventoryService.DeliveryInventoryService.DTO.network.RiderIdResponseDto;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.*;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Rider.RiderStatus;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.RiderRepository;
+import com.DeliveryInventoryService.DeliveryInventoryService.Repository.RoutePointRepository;
+import com.DeliveryInventoryService.DeliveryInventoryService.Repository.RouteRepository;
+import com.DeliveryInventoryService.DeliveryInventoryService.Repository.VehicleRepository;
 import com.cloudinary.Cloudinary;
 import com.cloudinary.utils.ObjectUtils;
 
@@ -29,6 +34,9 @@ public class RiderService {
     private final RiderRepository riderRepository;
     private final Cloudinary cloudinary;
     private final HttpServletRequest httpRequest;
+    private final VehicleRepository vehicleRepository;
+    private final RouteRepository routeRepository;
+    private final RoutePointRepository routePointRepository;
 
     public ApiResponse<Object> signupStep(RiderSignupDTO request) {
         Rider rider = riderRepository.findByPhone(request.phone()).orElse(null);
@@ -150,6 +158,42 @@ public class RiderService {
         return new ApiResponse<>(true, "Vehicle images uploaded", rider, 200);
     }
 
+    public ApiResponse<Object> createRoute(UUID vehicleId, RouteDTO routeDTO) {
+        try {
+            Vehicle vehicle = vehicleRepository.findById(vehicleId)
+                    .orElseThrow(() -> new RuntimeException("Vehicle not found"));
+
+            Route route = new Route();
+            route.setVehicle(vehicle);
+            route.setStartLocation(routeDTO.startLocation());
+            route.setDestinationLocation(routeDTO.destinationLocation());
+            route.setStartTime(routeDTO.startTime());
+            route.setEndTime(routeDTO.endTime());
+
+            routeRepository.save(route);
+
+            // Save route points
+            if (routeDTO.points() != null && !routeDTO.points().isEmpty()) {
+                List<RoutePoint> points = new ArrayList<>();
+                int seq = 1;
+                for (RoutePointDTO p : routeDTO.points()) {
+                    RoutePoint point = new RoutePoint();
+                    point.setRoute(route);
+                    point.setSequence(seq++);
+                    point.setLocationName(p.locationName());
+                    point.setLatitude(p.latitude());
+                    point.setLongitude(p.longitude());
+                    points.add(point);
+                }
+                routePointRepository.saveAll(points);
+            }
+
+            return new ApiResponse<>(true, "Route created successfully", route, 201);
+        } catch (Exception e) {
+            return new ApiResponse<>(false, "Failed to create route: " + e.getMessage(), null, 500);
+        }
+    }
+
     public ApiResponse<Object> handleVehicleType(Rider rider, RiderSignupDTO request) {
         String vehicleTypeStr = request.vehicleTypeStr();
         Vehicle vehicle = rider.getVehicle();
@@ -188,6 +232,23 @@ public class RiderService {
         Rider rider = getRiderByPhone(phone);
         rider.setStatus(RiderStatus.BLACKLISTED);
         return riderRepository.save(rider);
+    }
+
+    public ApiResponse<Object> findTimeOfProduct(List<UUID> productIds) {
+        try {
+            UUID productId = productIds.get(0);
+            UUID userId = UUID.fromString(httpRequest.getAttribute("id").toString());
+
+            // we have to find distance in three way
+            // 1 time to collect the parcel and move to warhouse;
+
+            // 2 time to load the parcel to ship to the user's warehouse
+            // 3 time to ship the parcel to user's location
+
+            return new ApiResponse<>(true, "Time of product found", productId, 200);
+        } catch (Exception e) {
+            return new ApiResponse<>(false, "Failed to find time of product: " + e.getMessage(), null, 500);
+        }
     }
 }
 

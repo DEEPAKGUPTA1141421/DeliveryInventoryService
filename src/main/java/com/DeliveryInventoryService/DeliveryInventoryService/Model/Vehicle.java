@@ -1,13 +1,16 @@
 package com.DeliveryInventoryService.DeliveryInventoryService.Model;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
@@ -39,6 +42,9 @@ public class Vehicle {
 
     @Enumerated(EnumType.STRING)
     private VehicleType vehicleType;
+
+    @OneToMany(mappedBy = "vehicle", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<Route> routes = new ArrayList<>();
 
     @OneToOne
     @JoinColumn(name = "rider_id", referencedColumnName = "id")
@@ -83,4 +89,4 @@ public class Vehicle {
 
 // huihiu gyuyuhbhjbh hhh bh bhh hhhhbhhh
 
-// nju huuhuuuuuhyuuyuuh hkhuk ygyy gtg ftt tf ftft
+// nju huuhuuuuuhyuuyuuh hkhuk
