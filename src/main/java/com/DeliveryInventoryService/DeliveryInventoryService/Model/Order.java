@@ -9,6 +9,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -23,9 +24,14 @@ public class Order {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
+    @Column(nullable = false)
 
     private UUID customerId;
+    @Column(nullable = false)
+    private UUID bookingId;
 
+    private UUID riderId;
+    // assigned rider
     private String originAddress;
     private double originLat;
     private double originLng;
@@ -34,17 +40,35 @@ public class Order {
     private double destLat;
     private double destLng;
 
-    private double weightKg;
-    private String serviceType; // STANDARD, EXPRESS
+    private double weightKg; // in kilograms
 
-    private ZonedDateTime placedAt;
+    @Column(nullable = false)
+    @Enumerated(jakarta.persistence.EnumType.STRING)
+    private ServiceType serviceType = ServiceType.STANDARD; // STANDARD, EXPRESS
+
+    public enum ServiceType {
+        STANDARD, EXPRESS
+    }
+
+    private ZonedDateTime placedAt = ZonedDateTime
+            .now(ZoneId.of("Asia/Kolkata"));;
     private ZonedDateTime expectedDeliveryDate;
-    private String status; // CREATED, PICKUP_SCHEDULED, IN_TRANSIT, DELIVERED
+
+    @Enumerated(jakarta.persistence.EnumType.STRING)
+    private Status status = Status.CREATED; // CREATED, PICKUP_SCHEDULED, IN_TRANSIT, DELIVERED
+
+    public enum Status {
+        CREATED, PICKUP_SCHEDULED, PICKED, WAREHOUSE, IN_TRANSIT, DELIVERED, CANCELLED
+    }
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
-    private ZonedDateTime createdAt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
+    private ZonedDateTime createdAt = ZonedDateTime
+            .now(ZoneId.of("Asia/Kolkata"));
 
     @UpdateTimestamp
     @Column(name = "updated_at")
     private ZonedDateTime updatedAt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
 }
+
+// yuuy ruh fjhuhuri gyhu efjgygy

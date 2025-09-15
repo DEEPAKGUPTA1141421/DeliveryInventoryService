@@ -45,3 +45,15 @@ Configurable business rules: Expose config for weights of time vs cost, distance
 Edge cases: Define handling for schedule cancellations, vehicle breakdowns, partial deliveries, returns, and capacity overbook situations.
 
 Tech choices (suggested): Kafka, PostgreSQL + PostGIS, Redis, REST, schema registry for Kafka, external routing provider (Google/OSRM) with caching.
+
+
+// if distance is below 40 collect in every 15 min
+// if distance is below 70 collect in every 30 min
+// if distance is below 100 collect i every 45 min
+// if distance is below 150 collect in every 1 hour 
+// if distance is below 200 collect in every 2 hour
+// if distance is below 500 collect in every 3 hour
+// if distance is below 500 collect in every 6 hour
+
+if shop is close from 8 pm to 8 am
+do not do AnyThing
