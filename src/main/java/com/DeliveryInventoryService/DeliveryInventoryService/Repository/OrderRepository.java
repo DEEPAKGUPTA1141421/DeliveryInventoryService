@@ -10,7 +10,7 @@ import com.DeliveryInventoryService.DeliveryInventoryService.Model.Order;
 
 import jakarta.transaction.Transactional;
 
-import java.time.ZonedDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -19,4 +19,6 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     @Transactional
     @Query(value = ":query", nativeQuery = true)
     void bulkInsert(@Param("query") String query);
+
+    Optional<Order> findByOrderNo(String orderNo);
 }

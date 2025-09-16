@@ -2,6 +2,8 @@ package com.DeliveryInventoryService.DeliveryInventoryService.Model;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import org.hibernate.annotations.CreationTimestamp;
@@ -29,6 +31,9 @@ public class Shipment {
     private long timeEstimateSeconds;
     private String status; // PLANNED, IN_TRANSIT, COMPLETED, FAILED
 
+    @OneToMany(mappedBy = "shipment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<Order> orders = new ArrayList<>();
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
@@ -37,5 +42,3 @@ public class Shipment {
     @Column(name = "updated_at")
     private ZonedDateTime updatedAt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
 }
-
-// hukhui hjui yuiyui iu8iuiyuyuiu

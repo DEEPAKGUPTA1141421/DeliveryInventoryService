@@ -39,6 +39,8 @@ public class RoutePoint {
     @Column(nullable = false)
     private Double longitude;
 
+    private String City;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = true, updatable = false)
     private ZonedDateTime createdAt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));

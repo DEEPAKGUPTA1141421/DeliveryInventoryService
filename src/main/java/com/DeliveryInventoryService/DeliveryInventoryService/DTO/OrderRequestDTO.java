@@ -23,12 +23,12 @@ public class OrderRequestDTO {
     private String originAddress;
     private double originLat;
     private double originLng;
-
+    private String originCity;
     @NotNull
     private String destAddress;
     private double destLat;
     private double destLng;
-
+    private String destCity;
     private double weightKg;
 
     private String serviceType; // STANDARD or EXPRESS
