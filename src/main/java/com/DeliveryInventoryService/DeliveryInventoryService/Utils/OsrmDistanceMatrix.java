@@ -12,6 +12,7 @@ import java.util.Map;
 public class OsrmDistanceMatrix {
 
     private static final String OSRM_URL = "http://router.project-osrm.org/table/v1/driving/";
+    private static final String OSRM_URL_DISTANCE = "http://router.project-osrm.org/route/v1/driving/";
     private static final int MAX_COORDS = 50; // safe batching size for OSRM
 
     private final RestTemplate restTemplate = new RestTemplate();
@@ -64,4 +65,4 @@ public class OsrmDistanceMatrix {
 
 // jjuiui ihuihi huihiuhuhihuihuihu
 // huiyhuiyuhu8huiyi8uou8huiyuhu8 njkjiouou uououoiu9huyy hyy7ytg
-// njkjjjjijjijkjijijji
+// njkjjjjijjijkjijijjijkhkhj

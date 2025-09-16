@@ -75,8 +75,13 @@ public class OrderService {
             return new ApiResponse<>(false, "Failed to create order: " + e.getMessage(), null, 501);
         }
     }
+
+    // private UUID NearestWareHouse(OrderRequestDTO request) {
+    // Double destLat = request.getDestLat();
+    // Double destLng = request.getDestLng();
+    // }
 }
 
 // yuyuuhui yuuihui 67tg yy 7iiyyi t76t
 
-// uiio yuhuhyu
+// uiio yuhuhyuklmkllkjijioj

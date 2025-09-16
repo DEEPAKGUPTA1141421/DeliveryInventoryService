@@ -16,6 +16,8 @@ public class OrderRequestDTO {
     private UUID riderId;
     @NotNull
     private Double distance;
+    @NotNull
+    private UUID wareHouseId;
 
     @NotNull
     private String originAddress;

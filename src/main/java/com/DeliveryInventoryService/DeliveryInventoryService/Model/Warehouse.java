@@ -5,6 +5,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -30,7 +32,13 @@ public class Warehouse {
     private double lng;
     private int capacityMaxParcels;
     private double capacityMaxKg;
-    private String type; // STAGING, REGIONAL, LAST_MILE_DEPOT
+
+    @Enumerated(EnumType.STRING)
+    private Type type; // STAGING, REGIONAL, LAST_MILE_DEPOT
+
+    public enum Type {
+        STAGING, REGIONAL, LAST_MILE_DEPOT
+    }
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

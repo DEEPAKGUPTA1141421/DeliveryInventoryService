@@ -13,7 +13,9 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 @Entity
@@ -30,6 +32,10 @@ public class Order {
     @Column(nullable = false)
     private UUID bookingId;
 
+    private UUID wareHouseId;
+
+    private Double distance;
+
     private UUID riderId;
     // assigned rider
     private String originAddress;
@@ -41,6 +47,8 @@ public class Order {
     private double destLng;
 
     private double weightKg; // in kilograms
+    @Column(unique = true, updatable = false)
+    private String orderNo; // Human readable order number
 
     @Column(nullable = false)
     @Enumerated(jakarta.persistence.EnumType.STRING)
@@ -69,6 +77,15 @@ public class Order {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private ZonedDateTime updatedAt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
+
+    @PrePersist
+    private void HumanReadibleOrderNo() {
+
+    }
 }
 
 // yuuy ruh fjhuhuri gyhu efjgygy
+
+// nyiyuyi ygu7uyy yu7uiy ihuhihunjkhuihyuii8u yuu8yuiyi8y
+
+// hy78y8gtu7tk7 guyuk8y7u8y y78tyyu

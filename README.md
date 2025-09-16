@@ -57,3 +57,12 @@ Tech choices (suggested): Kafka, PostgreSQL + PostGIS, Redis, REST, schema regis
 
 if shop is close from 8 pm to 8 am
 do not do AnyThing
+
+
+
+these riders will give me the orders to my warehouse now 
+i have bags like 5 kg 7.5kg 10 ,15 ,20 kg  carry bags
+let suppose in my delhi warehouse i receive different kind of orders from different
+city i have to deliver these parcel to different city of ncr 
+
+how can i assign these orders to different bus
