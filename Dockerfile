@@ -1,10 +1,10 @@
-# Use Eclipse Temurin JDK 21 base image
-FROM eclipse-temurin:21-jdk
+# Use Eclipse Temurin OpenJDK 21
+FROM eclipse-temurin:21-jdk AS build
 
 # Set working directory
 WORKDIR /app
 
-# Copy Maven wrapper and pom.xml first for caching dependencies
+# Copy Maven wrapper and project files
 COPY mvnw .
 COPY .mvn .mvn
 COPY pom.xml .
@@ -12,17 +12,27 @@ COPY pom.xml .
 # Make mvnw executable
 RUN chmod +x mvnw
 
-# Download Maven dependencies offline (skip tests)
+# Download dependencies
 RUN ./mvnw dependency:go-offline -B
 
-# Copy the source code
+# Copy source code
 COPY src ./src
 
-# Package the application
+# Build the application
 RUN ./mvnw package -DskipTests
 
-# Expose the port that Cloud Run sets via PORT environment variable
+# Use a smaller runtime image
+FROM eclipse-temurin:21-jre
+
+# Set working directory
+WORKDIR /app
+
+# Copy the jar from the build stage
+COPY --from=build /app/target/DeliveryInventoryService-0.0.1-SNAPSHOT.jar app.jar
+
+# Expose the port Cloud Run will use
+ENV PORT 8080
 EXPOSE 8080
 
-# Run the Spring Boot jar (replace with your jar name if different)
-ENTRYPOINT ["java", "-jar", "target/DeliveryInventoryService-0.0.1-SNAPSHOT.jar"]
+# Start the application
+ENTRYPOINT ["java","-jar","app.jar"]
