@@ -2,8 +2,14 @@ package com.DeliveryInventoryService.DeliveryInventoryService.Controller;
 
 import com.DeliveryInventoryService.DeliveryInventoryService.DTO.ApiResponse;
 import com.DeliveryInventoryService.DeliveryInventoryService.DTO.OrderRequestDTO;
+import com.DeliveryInventoryService.DeliveryInventoryService.DTO.network.RiderIdResponseDto;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Order;
+import com.DeliveryInventoryService.DeliveryInventoryService.Model.Rider;
+import com.DeliveryInventoryService.DeliveryInventoryService.Model.Warehouse;
+import com.DeliveryInventoryService.DeliveryInventoryService.Model.Order.OrderStatus;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.OrderRepository;
+import com.DeliveryInventoryService.DeliveryInventoryService.Repository.RiderRepository;
+import com.DeliveryInventoryService.DeliveryInventoryService.Repository.WarehouseRepository;
 import com.DeliveryInventoryService.DeliveryInventoryService.Service.OrderService;
 import com.DeliveryInventoryService.DeliveryInventoryService.Utils.GoogleDistanceMatrix;
 import com.DeliveryInventoryService.DeliveryInventoryService.Utils.KMeansClustering;
@@ -12,6 +18,7 @@ import com.DeliveryInventoryService.DeliveryInventoryService.Utils.OsrmDistanceM
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -28,6 +35,10 @@ public class OrderController {
     private final GoogleDistanceMatrix googleDistanceMatrix;
 
     private final OsrmDistanceMatrix osrmDistanceMatrix;
+
+    private final WarehouseRepository warehouseRepository;
+
+    private final RiderRepository riderRepository;
 
     @PostMapping
     public ResponseEntity<?> createOrder(@RequestBody @Valid OrderRequestDTO orderRequest) {
@@ -51,8 +62,19 @@ public class OrderController {
         }
     }
 
+    @GetMapping("/test")
+    public ResponseEntity<?> Test() {
+        List<OrderStatus> status = new ArrayList<>();
+        status.add(OrderStatus.CREATED);
+        // List<Order> orders = orderRepository.findByOriginCityAndStatusIn("Delhi",
+        // status);
+        // List<Warehouse> warehouse = warehouseRepository.findByCity("Delhi");
+        List<Rider> riders = riderRepository.findByCity("Delhi");
+        return ResponseEntity.ok(riders);
+    }
+
     @GetMapping("/distance-matrix")
-    public ResponseEntity<?> getMatrix() {
+    public ResponseEntity<?> getMatrix() throws Exception {
         List<Order> orders = orderRepository.findAll(); // or a subset
         double[][] matrix = osrmDistanceMatrix.buildDistanceMatrix(orders);
 
@@ -66,7 +88,9 @@ public class OrderController {
         // entry.getValue().size() + " orders");
         // }
         KMeansClustering kmeans = new KMeansClustering(5, 100);
-        Map<Integer, Map<Integer, List<Integer>>> allRoutes = kmeans.clusterAndSolveVRP(orders, matrix, 50, 0);
+        System.out.println(("1"));
+
+        Map<Integer, Map<Integer, List<Integer>>> allRoutes = kmeans.clusterAndSolveVRP(orders, matrix, 50, "Delhi");
 
         for (var clusterEntry : allRoutes.entrySet()) {
             int clusterId = clusterEntry.getKey();
@@ -82,3 +106,5 @@ public class OrderController {
 }
 
 // uuiuiuyi8y7 y87y8yyyy87y 67t7yy yunjkhkjil khkuhij uhiuiuojujhihj
+
+// hiouyl9yd789y8 66k78 t86868y77y

@@ -21,6 +21,23 @@ public class Rider {
 
     @Column(nullable = true)
     private String name;
+    // Static address (optional if needed)
+    private String addressLine1;
+    private String addressLine2;
+    private String city;
+    private String state;
+    private String country;
+    private String postalCode;
+
+    // Live tracking
+    @Column(nullable = false)
+    private double currentLat;
+    @Column(nullable = false)
+    private double currentLng;
+
+    private Float heading; // direction in degrees
+    private Double speedKph; // current speed
+    private Double accuracy; // GPS accuracy in meters
 
     @Column(nullable = false, unique = true) // phone must be provided and unique
     private String phone;
@@ -71,3 +88,5 @@ public class Rider {
 
 // nhu hhhj ji jj jhhuu hyyiby hyhy hiuygjg hiuyy
 // gyuyigyugu gyugyu yuyybhjghjgu gyghh giygggug ggyu
+
+// nkjuouiohuiofrnkjhuo bhuiuo khiuif uiuo8u8ofr iuuou8fhjg

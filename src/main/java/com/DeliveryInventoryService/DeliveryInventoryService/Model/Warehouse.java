@@ -36,8 +36,16 @@ public class Warehouse {
     @Enumerated(EnumType.STRING)
     private Type type; // STAGING, REGIONAL, LAST_MILE_DEPOT
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private WarehouseStatus status = WarehouseStatus.ACTIVE;
+
     public enum Type {
         STAGING, REGIONAL, LAST_MILE_DEPOT
+    }
+
+    public enum WarehouseStatus {
+        ACTIVE, INACTIVE, MAINTENANCE
     }
 
     @CreationTimestamp

@@ -8,12 +8,19 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Order;
+import com.DeliveryInventoryService.DeliveryInventoryService.Model.Warehouse;
+import com.DeliveryInventoryService.DeliveryInventoryService.Repository.WarehouseRepository;
 
 public class KMeansClustering {
     private int k; // number of clusters
     private int maxIterations;
     private final Random random = new Random();
+
+    @Autowired
+    private WarehouseRepository warehouseRepository;
 
     public KMeansClustering(int k, int maxIterations) {
         this.k = k;
@@ -88,7 +95,11 @@ public class KMeansClustering {
             if (converged)
                 break;
         }
-
+        System.out.println("clustering is done");
+        for (Map.Entry<Integer, List<Order>> entry : clusters.entrySet()) {
+            System.out.println("Cluster " + entry.getKey() + ": " +
+                    entry.getValue().size() + " orders");
+        }
         return clusters;
     }
 
@@ -127,39 +138,41 @@ public class KMeansClustering {
             List<Order> orders,
             double[][] distanceMatrix,
             int riderCapacityKg,
-            int depotIndex) {
+            String city) throws Exception {
 
         // Step 1: Cluster orders
+        System.out.println(("2"));
         Map<Integer, List<Order>> clusters = clusterOrders(orders);
-
+        System.out.println(("size of clusters" + clusters.size()));
         // Final result: clusterId -> (riderId -> route)
         Map<Integer, Map<Integer, List<Integer>>> clusterRoutes = new HashMap<>();
-
+        System.out.println(("size of cluster Route" + clusterRoutes.size()));
         // Step 2: For each cluster, calculate min riders and solve VRP
         for (Map.Entry<Integer, List<Order>> entry : clusters.entrySet()) {
             int clusterId = entry.getKey();
             List<Order> clusterOrders = entry.getValue();
-
             if (clusterOrders.isEmpty())
                 continue;
 
             // Find min riders for this cluster
             int minRiders = MinimumRiderToFullFillTheRequest(clusterOrders, riderCapacityKg);
-
+            if (minRiders == -1) {
+                throw new Exception("We Can Not Cluster The Order Maybe Any Configuration is Missing");
+            }
+            Warehouse DepotWareHouse = findWareHouseOfCity(clusterOrders, city);
             // Run VRP solver for this cluster
             VRPCapacitySolver solver = new VRPCapacitySolver(
                     distanceMatrix,
                     clusterOrders,
                     riderCapacityKg,
                     minRiders,
-                    depotIndex);
+                    0);
 
             Map<Integer, List<Integer>> routes = solver.solve();
 
             // Save routes under this cluster
             clusterRoutes.put(clusterId, routes);
         }
-
         return clusterRoutes;
     }
 
@@ -197,4 +210,46 @@ public class KMeansClustering {
         }
         return true;
     }
+
+    private Warehouse findWareHouseOfCity(List<Order> clusterOrders, String city) {
+        List<Warehouse> wareHousePerCity = warehouseRepository.findByCity(city);
+        if (wareHousePerCity.size() == 0) {
+            throw new IllegalArgumentException("No WareHouse For That City");
+        } else if (wareHousePerCity.size() == 1)
+            return wareHousePerCity.get(0);
+        else {
+            return findAverageNearestWareHouse(clusterOrders, wareHousePerCity);
+        }
+    }
+
+    private Warehouse findAverageNearestWareHouse(List<Order> clusterOrders, List<Warehouse> wareHousePerCity) {
+        // 1. Find average latitude and longitude of all orders in cluster
+        double avgLat = clusterOrders.stream()
+                .mapToDouble(Order::getOriginLat)
+                .average()
+                .orElseThrow(() -> new IllegalArgumentException("No orders in cluster"));
+
+        double avgLng = clusterOrders.stream()
+                .mapToDouble(Order::getOriginLng)
+                .average()
+                .orElseThrow(() -> new IllegalArgumentException("No orders in cluster"));
+
+        // 2. Find nearest warehouse to the average location
+        Warehouse nearestWarehouse = null;
+        double minDistance = Double.MAX_VALUE;
+
+        for (Warehouse wh : wareHousePerCity) {
+            double distance = GeoUtils.distanceKm(avgLat, avgLng, wh.getLat(), wh.getLng());
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestWarehouse = wh;
+            }
+        }
+
+        return nearestWarehouse;
+    }
 }
+
+// niuhiyhiuyiy78y78ihiyiyy87y687
+
+//khiuhi jgyuiuyfr jguytgkuyuf yuty7uy78

@@ -43,6 +43,10 @@ public class Vehicle {
     @Enumerated(EnumType.STRING)
     private VehicleType vehicleType;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private VehicleStatus status = VehicleStatus.AVAILABLE;
+
     @OneToMany(mappedBy = "vehicle", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<Route> routes = new ArrayList<>();
 
@@ -54,8 +58,9 @@ public class Vehicle {
     private double capacityKg;
     private int maxParcels;
 
-    @Enumerated(EnumType.STRING)
-    private Status status = Status.ACTIVE;
+    public enum VehicleStatus {
+        AVAILABLE, ASSIGNED, IN_TRANSIT, MAINTENANCE, OUT_OF_SERVICE
+    }
 
     @Column(nullable = false)
     private String ratePerKm; // business config

@@ -29,7 +29,14 @@ public class Shipment {
     private ZonedDateTime arrivalTimeEst;
     private double costEstimate;
     private long timeEstimateSeconds;
-    private String status; // PLANNED, IN_TRANSIT, COMPLETED, FAILED
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private ShipmentStatus status = ShipmentStatus.CREATED;
+
+    public enum ShipmentStatus {
+        CREATED, ASSIGNED, PICKED_UP, IN_TRANSIT, DELIVERED, CANCELLED
+    }
 
     @OneToMany(mappedBy = "shipment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<Order> orders = new ArrayList<>();

@@ -21,9 +21,11 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import jakarta.persistence.EnumType;
 
 @Entity
 @Table(name = "orders")
+
 @Data
 
 public class Order {
@@ -56,29 +58,41 @@ public class Order {
 
     private double weightKg; // in kilograms
     @Column(unique = true, updatable = false)
+
     private String orderNo; // Human readable order number
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "shipment_id")
     private Shipment shipment;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "priority")
+    private OrderPriority priority = OrderPriority.NORMAL;
+
     @Column(nullable = false)
-    @Enumerated(jakarta.persistence.EnumType.STRING)
+    @Enumerated(EnumType.STRING)
     private ServiceType serviceType = ServiceType.STANDARD; // STANDARD, EXPRESS
 
     public enum ServiceType {
         STANDARD, EXPRESS
     }
 
+    @Column(name = "volume_cubic_meter")
+    private Double volumeCubicMeter;
+
     private ZonedDateTime placedAt = ZonedDateTime
             .now(ZoneId.of("Asia/Kolkata"));;
     private ZonedDateTime expectedDeliveryDate;
 
-    @Enumerated(jakarta.persistence.EnumType.STRING)
-    private Status status = Status.CREATED; // CREATED, PICKUP_SCHEDULED, IN_TRANSIT, DELIVERED
+    @Enumerated(EnumType.STRING)
+    private OrderStatus status = OrderStatus.CREATED; // CREATED, PICKUP_SCHEDULED, IN_TRANSIT, DELIVERED
 
-    public enum Status {
-        CREATED, PICKUP_SCHEDULED, PICKED, WAREHOUSE, IN_TRANSIT, DELIVERED, CANCELLED
+    public enum OrderStatus {
+        CREATED, PICKUP_SCHEDULED, PICKED, WAREHOUSE, IN_TRANSIT, DELIVERED, CANCELLED, PENDING
+    }
+
+    public enum OrderPriority {
+        LOW, NORMAL, HIGH, URGENT
     }
 
     @CreationTimestamp

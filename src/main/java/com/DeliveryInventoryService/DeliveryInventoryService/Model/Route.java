@@ -30,6 +30,9 @@ public class Route {
     @JsonIgnore
     private Vehicle vehicle;
 
+    @Column(name = "route_name")
+    private String routeName;
+
     @Column(nullable = false)
     private String startLocation;
 

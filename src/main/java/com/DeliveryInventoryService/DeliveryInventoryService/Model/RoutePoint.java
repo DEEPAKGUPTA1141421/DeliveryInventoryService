@@ -41,6 +41,22 @@ public class RoutePoint {
 
     private String City;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "point_type")
+    private PointType pointType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private PointStatus status = PointStatus.PENDING;
+
+    public enum PointType {
+        PICKUP, DELIVERY, WAREHOUSE
+    }
+
+    public enum PointStatus {
+        PENDING, IN_TRANSIT, COMPLETED, FAILED
+    }
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = true, updatable = false)
     private ZonedDateTime createdAt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));

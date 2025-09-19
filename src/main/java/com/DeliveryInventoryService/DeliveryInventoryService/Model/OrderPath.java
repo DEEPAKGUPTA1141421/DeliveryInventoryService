@@ -20,14 +20,14 @@ public class OrderPath {
     private UUID id;
 
     @Column(nullable = false)
-    private UUID orderId;   // Link to the order
+    private UUID orderId; // Link to the order
 
     @ElementCollection
     @CollectionTable(name = "order_path_points", joinColumns = @JoinColumn(name = "order_path_id"))
     @Column(name = "city_name")
-    private List<String> path;  // ordered list of cities from start → end
+    private List<String> path; // ordered list of cities from start → end
 
-    private long totalTimeSeconds;   // total travel time for the path
+    private long totalTimeSeconds; // total travel time for the path
 
     private String status = "PLANNED"; // PLANNED, IN_PROGRESS, COMPLETED
 

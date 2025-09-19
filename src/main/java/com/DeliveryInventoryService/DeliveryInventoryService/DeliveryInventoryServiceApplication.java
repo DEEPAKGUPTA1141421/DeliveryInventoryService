@@ -5,11 +5,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableAsync
 @EnableFeignClients
 @EnableAspectJAutoProxy
+@EnableScheduling
 public class DeliveryInventoryServiceApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(DeliveryInventoryServiceApplication.class, args);
