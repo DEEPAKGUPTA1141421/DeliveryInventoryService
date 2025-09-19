@@ -1,34 +1,28 @@
-# Use OpenJDK as base image
-FROM eclipse-temurin:21-jdk AS build
-
-# Set working directory
-WORKDIR /app
-
-# Copy Gradle/Maven files first for caching dependencies
-COPY mvnw .
-COPY .mvn .mvn
-COPY pom.xml .
-
-# Download dependencies (skip tests to speed up build)
-RUN ./mvnw dependency:go-offline -B
-
-# Copy source code
-COPY src src
-
-# Package the application
-RUN ./mvnw package -DskipTests
-
-# --- Runtime Stage ---
+# Use Eclipse Temurin JDK 21 as base
 FROM eclipse-temurin:21-jdk
 
 # Set working directory
 WORKDIR /app
 
-# Copy built JAR from build stage
-COPY --from=build /app/target/*.jar app.jar
+# Copy Maven wrapper and project files
+COPY mvnw .
+COPY .mvn .mvn
+COPY pom.xml .
 
-# Expose port (Cloud Run expects 8080)
-EXPOSE 8080
+# Give execute permission to Maven wrapper
+RUN chmod +x mvnw
 
-# Run the application
-ENTRYPOINT ["java","-jar","app.jar"]
+# Download dependencies offline (skip tests to speed up build)
+RUN ./mvnw dependency:go-offline -B
+
+# Copy the entire source code
+COPY src ./src
+
+# Build the application
+RUN ./mvnw package -DskipTests
+
+# Expose the port your Spring Boot app uses
+EXPOSE 8082
+
+# Run the Spring Boot application
+ENTRYPOINT ["java","-jar","target/DeliveryInventoryService-0.0.1-SNAPSHOT.jar"]
