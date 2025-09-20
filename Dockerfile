@@ -1,38 +1,32 @@
-# Use Eclipse Temurin OpenJDK 21
-FROM eclipse-temurin:21-jdk AS build
+# Use lightweight JDK
+FROM eclipse-temurin:17-jdk-alpine as build
 
-# Set working directory
+# Set working dir
 WORKDIR /app
 
-# Copy Maven wrapper and project files
-COPY mvnw .
+# Copy Gradle/Maven files first for caching
+COPY mvnw pom.xml ./
 COPY .mvn .mvn
-COPY pom.xml .
-
-# Make mvnw executable
-RUN chmod +x mvnw
-
-# Download dependencies
 RUN ./mvnw dependency:go-offline -B
 
 # Copy source code
 COPY src ./src
 
-# Build the application
+# Build the JAR
 RUN ./mvnw package -DskipTests
 
-# Use a smaller runtime image
-FROM eclipse-temurin:21-jre
+# ==========================
+# Runtime image
+# ==========================
+FROM eclipse-temurin:17-jre-alpine
 
-# Set working directory
 WORKDIR /app
 
-# Copy the jar from the build stage
+# Copy JAR from build stage
 COPY --from=build /app/target/DeliveryInventoryService-0.0.1-SNAPSHOT.jar app.jar
 
-# Expose the port Cloud Run will use
-ENV PORT 8080
+# Expose the Cloud Run port
 EXPOSE 8080
 
-# Start the application
+# Run app
 ENTRYPOINT ["java","-jar","app.jar"]
