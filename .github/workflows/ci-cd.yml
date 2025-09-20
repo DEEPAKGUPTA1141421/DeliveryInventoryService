@@ -36,7 +36,7 @@ jobs:
           IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/services/${{ env.SERVICE_NAME }}:${{ github.sha }}"
           docker build -t $IMAGE .
           docker push $IMAGE
-        working-directory: ./DeliveryInventoryService
+        working-directory: .
 
       - name: Deploy to Cloud Run
         run: |
