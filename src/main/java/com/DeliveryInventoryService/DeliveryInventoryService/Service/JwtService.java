@@ -6,6 +6,7 @@ import com.DeliveryInventoryService.DeliveryInventoryService.Configuration.KeyLo
 
 import io.jsonwebtoken.*;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 
 import java.util.Date;
 import java.util.UUID;
@@ -13,6 +14,7 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 
 @Service
+@Lazy
 public class JwtService {
 
     private final PrivateKey privateKey;
@@ -76,6 +78,5 @@ public class JwtService {
         }
     }
 }
-
 
 // ih ngyutu futu gyugyyyyyygtuttu

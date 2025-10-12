@@ -31,10 +31,10 @@ public class Rider {
 
     // Live tracking
     @Column(nullable = false)
-    private double currentLat;
+    private double currentLat= 0.0;
 
     @Column(nullable = false)
-    private double currentLng;
+    private double currentLng = 0.0;
 
     private Float heading; // direction in degrees
     private Double speedKph; // current speed
