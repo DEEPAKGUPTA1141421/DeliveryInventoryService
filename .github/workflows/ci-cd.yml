@@ -2,7 +2,7 @@ name: CI/CD for DeliveryInventoryService
 
 on:
   push:
-    branches: [ main ]   # 🔹 Trigger on pushes to main branch
+    branches: [ main ]  # ✅ Change if your branch differs
 
 jobs:
   build-deploy:
@@ -11,37 +11,64 @@ jobs:
     steps:
       # ✅ Step 1: Checkout repository
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # ✅ Step 2: Authenticate with GCP
-      - name: Set up Cloud SDK
+      # ✅ Step 2: Set up gcloud
+      - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
           install_components: 'beta'
 
-      - name: Authenticate with service account
+      # ✅ Step 3: Authenticate with service account
+      - name: Authenticate with GCP
         uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      # ✅ Step 3: Configure Docker for Artifact Registry
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+      # ✅ Step 4: Verify authentication and registry
+      - name: Verify gcloud setup
+        run: |
+          gcloud auth list
+          gcloud config list
+          gcloud artifacts repositories list --location=asia-south1
 
-      # ✅ Step 4: Build Docker image
+      # ✅ Step 5: Configure Docker authentication for Artifact Registry
+      - name: Configure Docker authentication
+        run: |
+          echo "🔐 Configuring Docker authentication for Artifact Registry..."
+          gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+
+      # ✅ Step 6: Build Docker image
       - name: Build Docker image
         run: |
+          echo "🏗️ Building Docker image..."
           docker build -t asia-south1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/deliveryinventory-repo/deliveryinventoryservice:latest .
 
-      # ✅ Step 5: Push Docker image to Artifact Registry
+      # ✅ Step 7: Check if repository exists (auto-create if missing)
+      - name: Ensure Artifact Registry exists
+        run: |
+          echo "🧩 Ensuring Artifact Registry repository exists..."
+          if ! gcloud artifacts repositories describe deliveryinventory-repo --location=asia-south1 >/dev/null 2>&1; then
+            echo "🆕 Creating repository deliveryinventory-repo..."
+            gcloud artifacts repositories create deliveryinventory-repo \
+              --repository-format=docker \
+              --location=asia-south1 \
+              --description="Docker repo for DeliveryInventoryService"
+          else
+            echo "✅ Repository deliveryinventory-repo already exists."
+          fi
+
+      # ✅ Step 8: Push Docker image
       - name: Push Docker image
         run: |
+          echo "📦 Pushing image to Artifact Registry..."
           docker push asia-south1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/deliveryinventory-repo/deliveryinventoryservice:latest
 
-      # ✅ Step 6: Deploy to Cloud Run
+      # ✅ Step 9: Deploy to Cloud Run
       - name: Deploy to Cloud Run
         run: |
+          echo "🚀 Deploying to Cloud Run..."
           gcloud run deploy deliveryinventoryservice \
             --image asia-south1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/deliveryinventory-repo/deliveryinventoryservice:latest \
             --platform managed \
