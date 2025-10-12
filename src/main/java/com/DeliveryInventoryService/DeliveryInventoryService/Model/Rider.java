@@ -32,6 +32,7 @@ public class Rider {
     // Live tracking
     @Column(nullable = false)
     private double currentLat;
+
     @Column(nullable = false)
     private double currentLng;
 

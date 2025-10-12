@@ -6,7 +6,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.5.4</version>
+		<version>3.3.4</version> <!--  ✅ Correct Boot version  -->
 		<relativePath /> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.DeliveryInventoryService</groupId>
@@ -104,6 +104,12 @@
             <version>0.11.5</version>
             <scope>runtime</scope>
         </dependency>
+
+ <dependency>
+    <groupId>io.github.cdimascio</groupId>
+    <artifactId>dotenv-kotlin</artifactId>
+    <version>6.4.0</version>
+</dependency>
 
 		<dependency>
             <groupId>org.springframework.boot</groupId>
