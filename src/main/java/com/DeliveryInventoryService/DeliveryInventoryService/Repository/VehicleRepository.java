@@ -14,4 +14,11 @@ import java.util.UUID;
 
 @Repository
 public interface VehicleRepository extends JpaRepository<Vehicle, UUID> {
+    /*
+     * find the vehicle which
+     * has
+     * origin
+     * City and
+     * DestCity
+     */
 }

@@ -13,4 +13,22 @@ import java.util.UUID;
 
 @Repository
 public interface RoutePointRepository extends JpaRepository<RoutePoint, UUID> {
+    @Query("""
+                SELECT rp
+                FROM RoutePoint rp
+                WHERE rp.route.id IN (
+                    SELECT rp2.route.id
+                    FROM RoutePoint rp2
+                    WHERE rp2.locationName = :originCity
+                       OR rp2.locationName = :destinationCity
+                )
+                ORDER BY rp.route.id, rp.sequence ASC
+            """)
+
+    List<RoutePoint> findValidRoutePoints(
+            @Param("originCity") String originCity,
+            @Param("destinationCity") String destinationCity);
+
 }
+// uhiuhji uhh uhh huuh huj
+// juj huhuhu kjju

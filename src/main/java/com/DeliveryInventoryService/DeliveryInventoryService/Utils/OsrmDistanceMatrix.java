@@ -61,8 +61,3 @@ public class OsrmDistanceMatrix {
         return distanceMatrix;
     }
 }
-// jiojiojo uihiu huihuihuih hhi huihuihiuhuihuihui hhuih
-
-// jjuiui ihuihi huihiuhuhihuihuihu
-// huiyhuiyuhu8huiyi8uou8huiyuhu8 njkjiouou uououoiu9huyy hyy7ytg
-// njkjjjjijjijkjijijjijkhkhj

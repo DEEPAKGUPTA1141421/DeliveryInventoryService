@@ -59,6 +59,7 @@ public class Vehicle {
     private int maxParcels;
 
     public enum VehicleStatus {
+
         AVAILABLE, ASSIGNED, IN_TRANSIT, MAINTENANCE, OUT_OF_SERVICE
     }
 

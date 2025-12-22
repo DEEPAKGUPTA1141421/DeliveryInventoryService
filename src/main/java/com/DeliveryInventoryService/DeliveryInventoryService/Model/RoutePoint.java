@@ -1,5 +1,6 @@
 package com.DeliveryInventoryService.DeliveryInventoryService.Model;
 
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.UUID;
@@ -44,6 +45,11 @@ public class RoutePoint {
     @Enumerated(EnumType.STRING)
     @Column(name = "point_type")
     private PointType pointType;
+    @Column(nullable = false)
+    private LocalDateTime startTime;
+
+    @Column(nullable = false)
+    private LocalDateTime endTime;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
@@ -65,4 +71,4 @@ public class RoutePoint {
     @Column(name = "updated_at")
     private ZonedDateTime updatedAt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
 }
-/// hg bhhud hgyiud hihidbhjheygbheyhe nhh jguytgybhjguyg
+/// hg bhhud hgyi njuj jnjk jnjnjnjk ghu hhuhu

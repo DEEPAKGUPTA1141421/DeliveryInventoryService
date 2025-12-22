@@ -1,5 +1,6 @@
 package com.DeliveryInventoryService.DeliveryInventoryService.Configuration;
 
+import com.DeliveryInventoryService.DeliveryInventoryService.Utils.KMeansClustering;
 import com.cloudinary.Cloudinary;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -27,5 +28,10 @@ public class CloudinaryConfig {
         config.put("api_key", apiKey);
         config.put("api_secret", apiSecret);
         return new Cloudinary(config);
+    }
+
+    @Bean
+    public KMeansClustering kMeans() {
+        return new KMeansClustering(5, 100);
     }
 }

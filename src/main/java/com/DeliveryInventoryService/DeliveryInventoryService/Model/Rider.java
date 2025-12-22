@@ -31,7 +31,7 @@ public class Rider {
 
     // Live tracking
     @Column(nullable = false)
-    private double currentLat= 0.0;
+    private double currentLat = 0.0;
 
     @Column(nullable = false)
     private double currentLng = 0.0;
@@ -87,7 +87,4 @@ public class Rider {
     }
 }
 
-// nhu hhhj ji jj jhhuu hyyiby hyhy hiuygjg hiuyy
-// gyuyigyugu gyugyu yuyybhjghjgu gyghh giygggug ggyu
-
-// nkjuouiohuiofrnkjhuo bhuiuo khiuif uiuo8u8ofr iuuou8fhjg
+// uhiy7i8ui hjioiu9tor uou0t5
