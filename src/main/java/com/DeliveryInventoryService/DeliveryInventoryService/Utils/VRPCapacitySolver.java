@@ -27,9 +27,9 @@ public class VRPCapacitySolver {
     /**
      * Core method to solve VRP with capacity constraints
      */
-    public Map<Integer, List<Integer>> solve() {
+    public Map<Integer, List<Order>> solve() {
         System.out.println("caling the solve function");
-        Map<Integer, List<Integer>> routes = new HashMap<>();
+        Map<Integer, List<Order>> routes = new HashMap<>();
         double[] remainingCapacity = new double[vehicleCount];
 
         Arrays.fill(remainingCapacity, vehicleCapacity);
@@ -37,7 +37,7 @@ public class VRPCapacitySolver {
         boolean[] visited = new boolean[orders.size()];
 
         for (int v = 0; v < vehicleCount; v++) {
-            List<Integer> route = new ArrayList<>();
+            List<Order> route = new ArrayList<>();
             double cap = vehicleCapacity;
 
             int current = findBestStart(visited, cap); // choose best start order
@@ -45,7 +45,7 @@ public class VRPCapacitySolver {
                 continue;
             System.out.println("Best Start " + current);
             // Start from chosen point
-            route.add(current);
+            route.add(orders.get(current));
             visited[current] = true;
             cap -= orders.get(current).getWeightKg();
 
@@ -56,14 +56,14 @@ public class VRPCapacitySolver {
                 if (next == -1)
                     break;
 
-                route.add(next);
+                route.add(orders.get(next));
                 visited[next] = true;
                 cap -= orders.get(next).getWeightKg();
                 current = next;
             }
 
             // Finally return to depot
-            route.add(depotIndex);
+            route.add(orders.get(depotIndex));
 
             routes.put(v, route);
             remainingCapacity[v] = cap;

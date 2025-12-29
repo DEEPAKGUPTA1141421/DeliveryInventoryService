@@ -2,6 +2,8 @@ package com.DeliveryInventoryService.DeliveryInventoryService.DTO;
 
 import java.util.List;
 
+import com.DeliveryInventoryService.DeliveryInventoryService.Model.RoutePoint;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -10,6 +12,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class PathResultDTO {
-    private List<String> path;
+    private List<RoutePoint> path;
     private long totalMinutes;
 }

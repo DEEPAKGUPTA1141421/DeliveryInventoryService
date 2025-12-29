@@ -2,6 +2,7 @@ package com.DeliveryInventoryService.DeliveryInventoryService.Utils.cronjob;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -69,7 +70,7 @@ public class BatchOrder {
             }
 
             try {
-                Map<Integer, Map<Integer, List<Integer>>> allRoutes = kmeans.clusterAndSolveVRP(orderPerCity,
+                Map<Integer, Map<Integer, List<Order>>> allRoutes = kmeans.clusterAndSolveVRP(orderPerCity,
                         distanceMatrix, 50, city);
 
                 logger.info("Currently working for " + city);
@@ -81,6 +82,16 @@ public class BatchOrder {
                     for (var riderEntry : clusterEntry.getValue().entrySet()) {
                         logger.info(" Rider " + riderEntry.getKey() + " route: " +
                                 riderEntry.getValue());
+                        for (var order : riderEntry.getValue()) {
+                            PathResultDTO pathResult = getShortestPath(
+                                    order.getOriginCity(),
+                                    order.getDestCity());
+                            if (pathResult == null)
+                                continue;
+                            logger.info("    Order ID: " + order.getId() +
+                                    ", Time Taken: " + pathResult.getTotalMinutes() +
+                                    "Route Path: " + pathResult.getPath() + " seconds");
+                        }
                     }
                     logger.info("=======================================================");
                 }
@@ -103,9 +114,14 @@ public class BatchOrder {
 
     @GetMapping("/shortest")
     public PathResultDTO getShortestPath(
+
             @RequestParam String from,
             @RequestParam String to) {
-
+        if (from == null || to == null) {
+            logger.info("From and To parameters must be provided");
+            return null;
+        }
         return routePathService.findShortestPath(from, to);
     }
 }
+// kjhu hknnjjk giyui nyhhu

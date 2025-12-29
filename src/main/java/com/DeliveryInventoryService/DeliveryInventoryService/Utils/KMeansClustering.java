@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -129,7 +130,7 @@ public class KMeansClustering {
     // ---------------------------------------------------------------
     // VRP EXECUTION
     // ---------------------------------------------------------------
-    public Map<Integer, Map<Integer, List<Integer>>> clusterAndSolveVRP(
+    public Map<Integer, Map<Integer, List<Order>>> clusterAndSolveVRP(
             List<Order> orders,
             double[][] distanceMatrix,
             int riderCapacityKg,
@@ -141,7 +142,7 @@ public class KMeansClustering {
 
         logger.info("Total clusters generated = {}", clusters.size());
 
-        Map<Integer, Map<Integer, List<Integer>>> clusterRoutes = new HashMap<>();
+        Map<Integer, Map<Integer, List<Order>>> clusterRoutes = new HashMap<>();
 
         for (Map.Entry<Integer, List<Order>> entry : clusters.entrySet()) {
 
@@ -175,7 +176,7 @@ public class KMeansClustering {
                     minRiders,
                     0);
 
-            Map<Integer, List<Integer>> routes = solver.solve();
+            Map<Integer, List<Order>> routes = solver.solve();
 
             logger.info("VRP complete for cluster {}. Assigned riders={}", clusterId, routes.size());
 

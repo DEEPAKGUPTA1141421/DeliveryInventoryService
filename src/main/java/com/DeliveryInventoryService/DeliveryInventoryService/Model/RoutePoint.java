@@ -13,10 +13,17 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 
 @Entity
 @Table(name = "route_points")
-@Data
+@Getter
+@Setter
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
+@ToString(onlyExplicitlyIncluded = true)
 public class RoutePoint {
 
     @Id
@@ -72,3 +79,4 @@ public class RoutePoint {
     private ZonedDateTime updatedAt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
 }
 /// hg bhhud hgyi njuj jnjk jnjnjnjk ghu hhuhu
+// ftygyudjjk ughukfn hkuijil

@@ -15,10 +15,17 @@ import com.fasterxml.jackson.annotation.JsonManagedReference;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 
 @Entity
 @Table(name = "routes")
-@Data
+@Getter
+@Setter
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
+@ToString(onlyExplicitlyIncluded = true)
 public class Route {
 
     @Id
@@ -65,4 +72,4 @@ public class Route {
     }
 }
 
-// kjhiul jhgyhjgfytg jhguy
+// kjhiul jhgyhjgfytg jhguy nhkhuifv mhuihujrf huihuior

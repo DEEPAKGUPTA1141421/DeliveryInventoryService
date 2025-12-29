@@ -29,6 +29,13 @@ public interface RoutePointRepository extends JpaRepository<RoutePoint, UUID> {
             @Param("originCity") String originCity,
             @Param("destinationCity") String destinationCity);
 
+    @Query("""
+                SELECT rp
+                FROM RoutePoint rp
+                WHERE rp.locationName = :city
+            """)
+    List<RoutePoint> findByCity(@Param("city") String city);
+
 }
 // uhiuhji uhh uhh huuh huj
 // juj huhuhu kjju
