@@ -28,6 +28,7 @@ public class RoutePoint {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @EqualsAndHashCode.Include // <--- ADD THIS
     private UUID id;
 
     @ManyToOne
@@ -80,3 +81,4 @@ public class RoutePoint {
 }
 /// hg bhhud hgyi njuj jnjk jnjnjnjk ghu hhuhu
 // ftygyudjjk ughukfn hkuijil
+// jji hjujunhn jijiji jiki jikiko jilikik jii nilki kkmjk

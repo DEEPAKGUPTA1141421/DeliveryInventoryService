@@ -1,7 +1,8 @@
 package com.DeliveryInventoryService.DeliveryInventoryService.Utils;
 
-import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,229 +19,162 @@ import lombok.RequiredArgsConstructor;
 public class RoutePathService {
 
     private static final Logger log = LoggerFactory.getLogger(RoutePathService.class);
-
     private final RoutePointRepository routePointRepository;
 
-    /*
-     * Graph:
-     * RoutePoint -> Next RoutePoints
+    // --- CACHES ---
+    // City -> List of Points (For Transfers)
+    private Map<String, List<RoutePoint>> cityGraph = new HashMap<>();
+
+    // CurrentPointID -> NextPoint (For Travel within same route)
+    // We use a Map instead of List.indexOf to avoid Lombok/Equals issues entirely
+    private Map<UUID, RoutePoint> nextHopMap = new HashMap<>();
+
+    /**
+     * Pre-loads all data and maps "Next Steps" explicitly using UUIDs.
      */
-    private final Map<RoutePoint, List<RoutePoint>> graph = new HashMap<>();
+    private void buildInMemoryGraph() {
+        List<RoutePoint> allPoints = routePointRepository.findAll();
 
-    /*
-     * ==================================================
-     * GRAPH BUILDING
-     * ==================================================
-     */
-    private void buildGraph(String startCity, String endCity) {
+        // 1. Group by City
+        cityGraph = allPoints.stream()
+                .collect(Collectors.groupingBy(RoutePoint::getLocationName));
 
-        log.info("🔧 Starting graph build");
-        log.info("➡ startCity={}, endCity={}", startCity, endCity);
+        // 2. Group by Route, Sort, and Link the chain
+        Map<UUID, List<RoutePoint>> pointsByRoute = allPoints.stream()
+                .collect(Collectors.groupingBy(rp -> rp.getRoute().getId()));
 
-        graph.clear();
+        nextHopMap.clear();
 
-        List<RoutePoint> points = routePointRepository.findValidRoutePoints(startCity, endCity);
+        for (List<RoutePoint> routePoints : pointsByRoute.values()) {
+            // Sort by sequence (1, 2, 3...)
+            routePoints.sort(Comparator.comparingInt(RoutePoint::getSequence));
 
-        log.info("📥 Fetched {} RoutePoints from DB", points.size());
-
-        for (int i = 0; i < points.size(); i++) {
-            RoutePoint rp = points.get(i);
-            log.info("DB RP[{}] -> id={}, city={}, routeId={}, seq={}",
-                    i,
-                    rp.getId(),
-                    rp.getLocationName(),
-                    rp.getRoute().getId(),
-                    rp.getSequence());
-        }
-
-        for (int i = 0; i < points.size() - 1; i++) {
-
-            RoutePoint curr = points.get(i);
-            RoutePoint next = points.get(i + 1);
-
-            log.info("🔗 Checking connection {} -> {}",
-                    curr.getLocationName(),
-                    next.getLocationName());
-
-            if (!curr.getRoute().getId()
-                    .equals(next.getRoute().getId())) {
-
-                log.info("⛔ Skipped (different routes)");
-                continue;
+            // Map: Point A -> Point B, Point B -> Point C
+            for (int i = 0; i < routePoints.size() - 1; i++) {
+                RoutePoint current = routePoints.get(i);
+                RoutePoint next = routePoints.get(i + 1);
+                nextHopMap.put(current.getId(), next);
             }
-
-            graph.computeIfAbsent(curr, k -> {
-                log.info("➕ New graph node: {}", curr.getLocationName());
-                return new ArrayList<>();
-            }).add(next);
-
-            log.info("✅ Edge added: {} -> {}",
-                    curr.getLocationName(),
-                    next.getLocationName());
         }
 
-        log.info("✅ Graph build complete. Nodes={}", graph.size());
+        log.info("Graph Built: {} Cities, {} Hops mapped.", cityGraph.size(), nextHopMap.size());
     }
 
-    /*
-     * ==================================================
-     * SHORTEST PATH (DIJKSTRA)
-     * ==================================================
-     */
-    public PathResultDTO findShortestPath(
-            String startCity,
-            String endCity) {
+    public PathResultDTO findShortestPath(String startCity, String endCity) {
+        // Always rebuild graph to get fresh data
+        buildInMemoryGraph();
 
-        log.info("🚚 Finding shortest path");
-        log.info("➡ startCity={}, endCity={}", startCity, endCity);
+        // Priority Queue: Orders nodes by Earliest Arrival Time
+        PriorityQueue<NodeState> pq = new PriorityQueue<>(Comparator.comparing(n -> n.arrivalTime));
 
-        buildGraph(startCity, endCity);
-        if (!startCity.equals(endCity) || (1 / 2) == 0)
-            return null;
-        PriorityQueue<Node> pq = new PriorityQueue<>(Comparator.comparingLong(n -> n.cost));
+        // Tracks best arrival time at every specific RoutePoint ID
+        Map<UUID, LocalDateTime> bestArrivalAtPoint = new HashMap<>();
 
-        Map<RoutePoint, Long> dist = new HashMap<>();
-        Map<RoutePoint, RoutePoint> parent = new HashMap<>();
+        // Tracks path for reconstruction: Child UUID -> Parent UUID
+        Map<UUID, UUID> parentMap = new HashMap<>();
 
-        List<RoutePoint> startPoints = routePointRepository.findByCity(startCity);
+        // Lookup map for ID -> Object (needed for reconstruction)
+        Map<UUID, RoutePoint> idToPointMap = cityGraph.values().stream()
+                .flatMap(List::stream)
+                .collect(Collectors.toMap(RoutePoint::getId, rp -> rp));
 
-        log.info("📍 Start RoutePoints found: {}", startPoints.size());
+        Set<UUID> visited = new HashSet<>();
 
-        for (RoutePoint sp : startPoints) {
-            log.info("🟢 Start RP id={}, routeId={}, seq={}",
-                    sp.getId(),
-                    sp.getRoute().getId(),
-                    sp.getSequence());
+        // --- STEP 1: INITIALIZE START NODES ---
+        List<RoutePoint> startPoints = cityGraph.getOrDefault(startCity, Collections.emptyList());
 
-            dist.put(sp, 0L);
-            pq.add(new Node(sp, 0));
+        if (startPoints.isEmpty()) {
+            throw new RuntimeException("Start city '" + startCity + "' not found in database.");
         }
 
-        RoutePoint destination = null;
+        for (RoutePoint startPoint : startPoints) {
+            // We are "ready to leave" the start point at its EndTime
+            bestArrivalAtPoint.put(startPoint.getId(), startPoint.getEndTime());
+            pq.add(new NodeState(startPoint, startPoint.getEndTime()));
+        }
 
+        RoutePoint finalDestinationPoint = null;
+        LocalDateTime bestFinalTime = LocalDateTime.MAX;
+
+        // --- STEP 2: DIJKSTRA ---
         while (!pq.isEmpty()) {
+            NodeState current = pq.poll();
+            RoutePoint u = current.point;
 
-            Node curr = pq.poll();
-            RoutePoint u = curr.point;
+            if (visited.contains(u.getId()))
+                continue;
+            visited.add(u.getId());
 
-            log.info("➡ Visiting RP id={}, city={}, cost={}",
-                    u.getId(),
-                    u.getLocationName(),
-                    curr.cost);
-
+            // Check Destination
             if (u.getLocationName().equals(endCity)) {
-                log.info("🎯 Destination reached at RP id={}", u.getId());
-                destination = u;
-                break;
-            }
-
-            if (!graph.containsKey(u)) {
-                log.info("⚠ No outgoing edges from RP id={}", u.getId());
+                if (current.arrivalTime.isBefore(bestFinalTime)) {
+                    bestFinalTime = current.arrivalTime;
+                    finalDestinationPoint = u;
+                }
+                // Continue to ensure we find the absolute optimal time across all route options
                 continue;
             }
 
-            for (RoutePoint v : graph.get(u)) {
+            // --- OPTION A: TRAVEL (Next stop on same route) ---
+            // Using our safe Map, not indexOf
+            RoutePoint nextInRoute = nextHopMap.get(u.getId());
 
-                long travelTime = computeTime(u, v);
-                long newCost = curr.cost + travelTime;
+            if (nextInRoute != null) {
+                // Cost is the arrival time at the NEXT stop
+                relax(u, nextInRoute, nextInRoute.getEndTime(), pq, bestArrivalAtPoint, parentMap);
+            }
 
-                log.debug("🔍 Edge {} -> {} ({} mins)",
-                        u.getLocationName(),
-                        v.getLocationName(),
-                        travelTime);
+            // --- OPTION B: TRANSFER (Switch vehicle at same city) ---
+            List<RoutePoint> potentialTransfers = cityGraph.getOrDefault(u.getLocationName(), Collections.emptyList());
 
-                if (newCost < dist.getOrDefault(v, Long.MAX_VALUE)) {
+            for (RoutePoint transferPoint : potentialTransfers) {
+                // Constraint 1: Must be a different route
+                // Constraint 2: Transfer vehicle must depart AFTER we arrived
+                boolean isDifferentRoute = !transferPoint.getRoute().getId().equals(u.getRoute().getId());
+                boolean isTimeValid = !transferPoint.getStartTime().isBefore(u.getEndTime());
 
-                    log.info("🟢 Relaxing RP id={} newCost={}",
-                            v.getId(),
-                            newCost);
-
-                    dist.put(v, newCost);
-                    parent.put(v, u);
-                    pq.add(new Node(v, newCost));
-
-                } else {
-                    log.info("🔴 Skip RP id={} better cost exists",
-                            v.getId());
+                if (isDifferentRoute && isTimeValid) {
+                    relax(u, transferPoint, transferPoint.getEndTime(), pq, bestArrivalAtPoint, parentMap);
                 }
             }
         }
 
-        if (destination == null) {
-            log.info("❌ No path found from {} to {}", startCity, endCity);
-            throw new RuntimeException("No route found");
+        if (finalDestinationPoint == null) {
+            throw new RuntimeException("No route found between " + startCity + " and " + endCity);
         }
 
-        List<RoutePoint> path = buildPath(destination, parent);
-
-        long totalCost = dist.get(destination);
-
-        log.info("✨ Shortest path computed");
-        log.info("🛣 Path length={}, TotalMinutes={}",
-                path.size(),
-                totalCost);
-
-        return new PathResultDTO(path, totalCost);
+        List<RoutePoint> path = reconstructPath(finalDestinationPoint, parentMap, idToPointMap);
+        return new PathResultDTO(path, bestFinalTime);
     }
 
-    /*
-     * ==================================================
-     * PATH RECONSTRUCTION
-     * ==================================================
-     */
-    private List<RoutePoint> buildPath(
-            RoutePoint end,
-            Map<RoutePoint, RoutePoint> parent) {
+    private void relax(RoutePoint u, RoutePoint v, LocalDateTime arrivalTime,
+            PriorityQueue<NodeState> pq,
+            Map<UUID, LocalDateTime> bestArrivalAtPoint,
+            Map<UUID, UUID> parentMap) {
 
-        log.info("🔄 Reconstructing path");
-
-        List<RoutePoint> path = new LinkedList<>();
-        RoutePoint node = end;
-
-        while (node != null) {
-
-            log.debug("⬅ Path RP id={}, city={}",
-                    node.getId(),
-                    node.getLocationName());
-
-            path.add(0, node);
-            node = parent.get(node);
+        if (arrivalTime.isBefore(bestArrivalAtPoint.getOrDefault(v.getId(), LocalDateTime.MAX))) {
+            bestArrivalAtPoint.put(v.getId(), arrivalTime);
+            parentMap.put(v.getId(), u.getId());
+            pq.add(new NodeState(v, arrivalTime));
         }
+    }
 
-        log.info("📌 Final path constructed ({} points)",
-                path.size());
+    private List<RoutePoint> reconstructPath(RoutePoint endPoint,
+            Map<UUID, UUID> parentMap,
+            Map<UUID, RoutePoint> idToPointMap) {
+        LinkedList<RoutePoint> path = new LinkedList<>();
+        RoutePoint curr = endPoint;
 
+        while (curr != null) {
+            path.addFirst(curr);
+            UUID parentId = parentMap.get(curr.getId());
+            curr = parentId != null ? idToPointMap.get(parentId) : null;
+        }
         return path;
     }
 
-    /*
-     * ==================================================
-     * TIME CALCULATION
-     * ==================================================
-     */
-    private long computeTime(RoutePoint from, RoutePoint to) {
-
-        long seconds = Duration.between(
-                from.getStartTime(),
-                to.getEndTime())
-                .getSeconds();
-
-        long minutes = Math.max(seconds / 60, 1);
-
-        log.debug("⏱ Time {} -> {} = {} mins",
-                from.getLocationName(),
-                to.getLocationName(),
-                minutes);
-
-        return minutes;
-    }
-
-    /*
-     * ==================================================
-     * DIJKSTRA NODE
-     * ==================================================
-     */
-    private record Node(RoutePoint point, long cost) {
+    private record NodeState(RoutePoint point, LocalDateTime arrivalTime) {
     }
 }
-// juj huhuhu gggd hgy htrtr rthtgh trrgt ttgtg httgtgrytrytrytryt
+
+// hujo hkujioij hjib hjjio jiikoikioij
