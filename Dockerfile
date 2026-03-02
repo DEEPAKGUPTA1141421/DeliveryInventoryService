@@ -1,35 +1,25 @@
-# Stage 1: Build
-FROM eclipse-temurin:17-jdk-alpine AS build
+# -----------------------------
+# STEP 1: Build JAR
+# -----------------------------
+FROM maven:3.9.9-eclipse-temurin-17 AS builder
 
-# Set workdir
 WORKDIR /app
 
-# Copy Maven wrapper and pom.xml
-COPY mvnw pom.xml ./
-COPY .mvn .mvn
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
 
-# Give execute permission to mvnw
-RUN chmod +x mvnw
-
-# Download dependencies
-RUN ./mvnw dependency:go-offline -B
-
-# Copy source code
 COPY src ./src
+RUN mvn clean package -DskipTests
 
-# Package the application
-RUN ./mvnw clean package -DskipTests
-
-# Stage 2: Run
-FROM eclipse-temurin:17-jre-alpine
+# -----------------------------
+# STEP 2: Runtime
+# -----------------------------
+FROM eclipse-temurin:17-jre-jammy
 
 WORKDIR /app
 
-# Copy the jar from build stage
-COPY --from=build /app/target/DeliveryInventoryService-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=builder /app/target/*.jar app.jar
 
-# Expose the port Cloud Run expects
 EXPOSE 8080
 
-# Run the Spring Boot application
-ENTRYPOINT ["java","-jar","app.jar"]
+ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -126,12 +126,12 @@ public class RoutePathService {
 
             // --- OPTION B: TRANSFER (Switch vehicle at same city) ---
             List<RoutePoint> potentialTransfers = cityGraph.getOrDefault(u.getLocationName(), Collections.emptyList());
-
+            LocalDateTime minTransferTime = u.getEndTime().plusMinutes(30);
             for (RoutePoint transferPoint : potentialTransfers) {
                 // Constraint 1: Must be a different route
                 // Constraint 2: Transfer vehicle must depart AFTER we arrived
                 boolean isDifferentRoute = !transferPoint.getRoute().getId().equals(u.getRoute().getId());
-                boolean isTimeValid = !transferPoint.getStartTime().isBefore(u.getEndTime());
+                boolean isTimeValid = !transferPoint.getStartTime().isBefore(minTransferTime);
 
                 if (isDifferentRoute && isTimeValid) {
                     relax(u, transferPoint, transferPoint.getEndTime(), pq, bestArrivalAtPoint, parentMap);
