@@ -15,6 +15,9 @@ import java.util.List;
 
 public interface WarehouseRepository extends JpaRepository<Warehouse, UUID> {
         List<Warehouse> findByCity(String city);
+
+        @Query("SELECT DISTINCT w.city FROM Warehouse w WHERE w.city IS NOT NULL AND w.status = 'ACTIVE'")
+        List<String> findAllDistinctCities();
 }
 
 // kjhiu hyiyhui uu8ouhuiyhiuhuhu bhh

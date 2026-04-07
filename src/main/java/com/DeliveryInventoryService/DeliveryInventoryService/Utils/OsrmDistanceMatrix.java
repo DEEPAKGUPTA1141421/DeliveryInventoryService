@@ -1,6 +1,9 @@
 package com.DeliveryInventoryService.DeliveryInventoryService.Utils;
 
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Order;
+
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -9,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 @Component
+@Slf4j
 public class OsrmDistanceMatrix {
 
     private static final String OSRM_URL = "http://router.project-osrm.org/table/v1/driving/";
@@ -59,5 +63,102 @@ public class OsrmDistanceMatrix {
             }
         }
         return distanceMatrix;
+    }
+
+    public record MatrixResult(
+            double[][] distances, // meters
+            double[][] durations // seconds
+    ) {
+    }
+
+    public MatrixResult getDistanceMatrix(
+            List<double[]> sources,
+            List<double[]> destinations) {
+
+        if (sources == null || sources.isEmpty()
+                || destinations == null || destinations.isEmpty()) {
+            return null;
+        }
+
+        try {
+
+            StringBuilder coords = new StringBuilder();
+
+            List<double[]> allPoints = new ArrayList<>();
+            allPoints.addAll(sources);
+            allPoints.addAll(destinations);
+
+            for (int i = 0; i < allPoints.size(); i++) {
+                double[] p = allPoints.get(i);
+                coords.append(p[0]).append(",").append(p[1]);
+                if (i < allPoints.size() - 1)
+                    coords.append(";");
+            }
+
+            StringBuilder srcIdx = new StringBuilder();
+            for (int i = 0; i < sources.size(); i++) {
+                srcIdx.append(i);
+                if (i < sources.size() - 1)
+                    srcIdx.append(";");
+            }
+
+            StringBuilder destIdx = new StringBuilder();
+            for (int i = 0; i < destinations.size(); i++) {
+                destIdx.append(i + sources.size());
+                if (i < destinations.size() - 1)
+                    destIdx.append(";");
+            }
+
+            String url = OSRM_URL + coords
+                    + "?sources=" + srcIdx
+                    + "&destinations=" + destIdx;
+
+            log.info("OSRM Table API call → {}", url);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> resp = restTemplate.getForObject(url, Map.class);
+
+            if (resp == null) {
+                log.warn("OSRM table response is null");
+                return null;
+            }
+
+            String code = (String) resp.get("code");
+            if (code == null || !code.equalsIgnoreCase("Ok")) {
+                log.warn("OSRM table bad response: {}", resp);
+                return null;
+            }
+
+            // ─────────────────────────────────────────────
+            // Step 4: Parse durations & distances
+            // ─────────────────────────────────────────────
+            List<List<Number>> durationsRaw = (List<List<Number>>) resp.get("durations");
+
+            List<List<Number>> distancesRaw = (List<List<Number>>) resp.get("distances");
+
+            if (durationsRaw == null || distancesRaw == null) {
+                log.warn("OSRM table missing matrix data");
+                return null;
+            }
+
+            int rows = durationsRaw.size();
+            int cols = durationsRaw.get(0).size();
+
+            double[][] durations = new double[rows][cols];
+            double[][] distances = new double[rows][cols];
+
+            for (int i = 0; i < rows; i++) {
+                for (int j = 0; j < cols; j++) {
+                    durations[i][j] = durationsRaw.get(i).get(j).doubleValue();
+                    distances[i][j] = distancesRaw.get(i).get(j).doubleValue();
+                }
+            }
+
+            return new MatrixResult(distances, durations);
+
+        } catch (Exception e) {
+            log.error("OSRM table API failed: {}", e.getMessage());
+            return null;
+        }
     }
 }

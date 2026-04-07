@@ -79,15 +79,6 @@ public class OrderController {
         List<Order> orders = orderRepository.findAll(); // or a subset
         double[][] matrix = osrmDistanceMatrix.buildDistanceMatrix(orders);
 
-        // checked kmean cluster
-        // KMeansClustering kmeans = new KMeansClustering(5, 100); // 5 clusters, 100
-        // max iterations
-        // Map<Integer, List<Order>> clusters = kmeans.clusterOrders(orders);
-
-        // for (Map.Entry<Integer, List<Order>> entry : clusters.entrySet()) {
-        // System.out.println("Cluster " + entry.getKey() + ": " +
-        // entry.getValue().size() + " orders");
-        // }
         KMeansClustering kmeans = new KMeansClustering(5, 100);
         System.out.println(("1"));
 
