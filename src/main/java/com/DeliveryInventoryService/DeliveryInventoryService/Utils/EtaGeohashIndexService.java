@@ -24,7 +24,7 @@ public class EtaGeohashIndexService {
     private final OsrmDistanceMatrix osrmDistanceMatrix;
     private final RedisTemplate<String, Object> etaRedisTemplate;
 
-    private static final int BATCH_SIZE = 25; // 🔥 tune this
+    private static final int BATCH_SIZE = 50; // 🔥 tune this
 
     public IndexResult indexCity(String city) {
 
@@ -51,9 +51,6 @@ public class EtaGeohashIndexService {
 
         int success = 0, failed = 0;
 
-        // ─────────────────────────────────────────────────────────────
-        // 🔥 PROCESS IN BATCHES
-        // ─────────────────────────────────────────────────────────────
         for (int i = 0; i < cells.size(); i += BATCH_SIZE) {
 
             List<String> batch = cells.subList(i, Math.min(i + BATCH_SIZE, cells.size()));
@@ -69,7 +66,6 @@ public class EtaGeohashIndexService {
                     geohashes.add(g);
                 }
 
-                // 🔥 destinations = warehouses
                 List<double[]> destinations = warehouses.stream()
                         .map(w -> new double[] { w.getLng(), w.getLat() })
                         .toList();

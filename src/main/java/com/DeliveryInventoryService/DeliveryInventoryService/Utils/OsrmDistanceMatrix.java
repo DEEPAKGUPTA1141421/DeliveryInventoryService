@@ -110,7 +110,8 @@ public class OsrmDistanceMatrix {
             }
 
             String url = OSRM_URL + coords
-                    + "?sources=" + srcIdx
+                    + "?annotations=distance,duration"
+                    + "&sources=" + srcIdx
                     + "&destinations=" + destIdx;
 
             log.info("OSRM Table API call → {}", url);
@@ -162,3 +163,4 @@ public class OsrmDistanceMatrix {
         }
     }
 }
+// jojiuhjjiijbhi
