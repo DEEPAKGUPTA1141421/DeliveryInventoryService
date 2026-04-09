@@ -20,7 +20,7 @@ public class EtaGeohashRefreshJob {
     private final WarehouseRepository warehouseRepository;
     private final EtaGeohashIndexService indexService;
 
-    @Scheduled(cron = "0 */2 * * * *")
+    @Scheduled(cron = "0 */30 * * * *")
     public void refreshAllCities() {
         log.info("══════════════════════════════════════════════════");
         log.info("  ETA Geohash Refresh Job — START");

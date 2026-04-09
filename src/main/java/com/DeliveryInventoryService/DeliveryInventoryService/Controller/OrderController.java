@@ -14,6 +14,7 @@ import com.DeliveryInventoryService.DeliveryInventoryService.Service.OrderServic
 import com.DeliveryInventoryService.DeliveryInventoryService.Utils.GoogleDistanceMatrix;
 import com.DeliveryInventoryService.DeliveryInventoryService.Utils.KMeansClustering;
 import com.DeliveryInventoryService.DeliveryInventoryService.Utils.OsrmDistanceMatrix;
+import com.DeliveryInventoryService.DeliveryInventoryService.Utils.cronjob.InterCityEtaRefreshJob;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,8 @@ public class OrderController {
     private final WarehouseRepository warehouseRepository;
 
     private final RiderRepository riderRepository;
+
+    private final InterCityEtaRefreshJob interCityEtaRefreshJob;
 
     @PostMapping
     public ResponseEntity<?> createOrder(@RequestBody @Valid OrderRequestDTO orderRequest) {
@@ -95,6 +98,13 @@ public class OrderController {
 
         return ResponseEntity.ok("Success");
     }
+
+    @GetMapping("/test2")
+    public ResponseEntity<?> Test2() {
+        interCityEtaRefreshJob.refreshAllCityPairs();
+        return ResponseEntity.ok("Test 2");
+    }
+
 }
 
 // uuiuiuyi8y7 y87y8yyyy87y 67t7yy yunjkhkjil khkuhij uhiuiuojujhihj
