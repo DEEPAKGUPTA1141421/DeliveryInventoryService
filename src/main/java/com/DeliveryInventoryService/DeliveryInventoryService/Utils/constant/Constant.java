@@ -22,4 +22,10 @@ public class Constant {
     public static final String BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
     public static final int[] BITS = { 16, 8, 4, 2, 1 };
     public static final String OK = "Ok";
+    // Business SLA buffers (seconds)
+    public static final long SELLER_PACK_SECONDS = 30 * 60; // 30 min
+    public static final long WAREHOUSE_LOAD_SECONDS = 20 * 60; // 20 min
+    public static final long LAST_MILE_PICKUP_SECONDS = 15 * 60; // 15 min
+    public static final long DELIVERY_BUFFER_SECONDS = 10 * 60; // 10 min
+
 }

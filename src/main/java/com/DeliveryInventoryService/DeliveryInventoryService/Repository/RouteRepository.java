@@ -17,4 +17,7 @@ public interface RouteRepository extends JpaRepository<Route, UUID> {
 
     List<Route> findByStatus(Status status);
 
+    @Query("SELECT DISTINCT r FROM Route r JOIN FETCH r.points LEFT JOIN FETCH r.vehicle WHERE r.status = :status")
+    List<Route> findByStatusWithPoints(@Param("status") Route.Status status);
+
 }

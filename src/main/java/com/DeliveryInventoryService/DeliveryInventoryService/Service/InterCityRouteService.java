@@ -3,12 +3,9 @@ package com.DeliveryInventoryService.DeliveryInventoryService.Service;
 import com.DeliveryInventoryService.DeliveryInventoryService.DTO.CityRouteEtaEntry;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Route;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.RoutePoint;
-import com.DeliveryInventoryService.DeliveryInventoryService.Model.Vehicle;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.RouteRepository;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.WarehouseRepository;
 import com.DeliveryInventoryService.DeliveryInventoryService.Utils.EtaRedisKeys;
-import com.DeliveryInventoryService.DeliveryInventoryService.Utils.OsrmRouteClient;
-import com.DeliveryInventoryService.DeliveryInventoryService.Utils.OsrmRouteClient.RouteResult;
 import com.DeliveryInventoryService.DeliveryInventoryService.Utils.constant.Constant;
 
 import lombok.RequiredArgsConstructor;
@@ -17,25 +14,22 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+
+import org.springframework.transaction.annotation.Transactional;
 import java.util.stream.Collectors;
 
 /**
- * Computes road travel time between every city pair and stores the result
+ * Computes scheduled travel time between every city pair and stores the result
  * in Redis under key pattern: eta:city:{origin}:{destination}
  *
- * Travel time formula:
- * travelTimeSeconds = roadDistanceMetres / vehicleSpeedMs
+ * Travel time = RoutePoint.endTime (origin departure) → RoutePoint.startTime (destination arrival).
+ * Distance    = Haversine straight-line between the two stop coordinates.
  *
- * Vehicle speed hierarchy (fastest → slowest):
- * TRAIN > BUS > FOUR_WHEELER > PICKUP > AUTO > MOTORCYCLE
- *
- * For each city pair the service:
- * 1. Finds all Route objects whose RoutePoint sequence covers both cities
- * 2. For each matching route, computes total road distance via OSRM
- * 3. Applies the speed of the vehicle assigned to that route
- * 4. Stores the minimum-time option in Redis with the full stop list
+ * No road-routing (OSRM) is used — timing is dictated entirely by the vehicle
+ * schedule stored in RoutePoint, not by road geometry.
  */
 @Service
 @RequiredArgsConstructor
@@ -44,31 +38,14 @@ public class InterCityRouteService {
 
     private final RouteRepository routeRepository;
     private final WarehouseRepository warehouseRepository;
-    private final OsrmRouteClient osrmRouteClient;
     private final RedisTemplate<String, Object> etaRedisTemplate;
 
-    // ── Vehicle speed constants (metres per second) ─────────────────────────
-    // These are conservative averages; tune per business SLA
-    private static final Map<Vehicle.VehicleType, Double> SPEED_MS;
-    static {
-        SPEED_MS = new EnumMap<>(Vehicle.VehicleType.class);
-        SPEED_MS.put(Vehicle.VehicleType.TRAIN, 27.8); // ~100 km/h
-        SPEED_MS.put(Vehicle.VehicleType.BUS, 19.4); // ~70 km/h
-        SPEED_MS.put(Vehicle.VehicleType.FOUR_WHEELER, 16.7); // ~60 km/h
-        SPEED_MS.put(Vehicle.VehicleType.PICKUP, 13.9); // ~50 km/h
-        SPEED_MS.put(Vehicle.VehicleType.AUTO, 8.3); // ~30 km/h
-        SPEED_MS.put(Vehicle.VehicleType.MOTORCYCLE, 11.1); // ~40 km/h
-    }
-
-    // Transfer penalty added when a parcel must change vehicles at an
-    // intermediate hub (loading/unloading + wait time)
-    public static final long TRANSFER_PENALTY_SECONDS = 3600L; // 1 hour
+    public static final long TRANSFER_PENALTY_SECONDS = 3600L; // 1 hour loading/unloading at hub
 
     // ── Public API ────────────────────────────────────────────────────────────
 
     /**
      * Returns the cached ETA entry for a direct city pair, or null if not cached.
-     * Callers should fall back to {@link #computeAndCache} on cache miss.
      */
     public CityRouteEtaEntry getCached(String originCity, String destCity) {
         String key = EtaRedisKeys.cityRouteKey(originCity, destCity);
@@ -80,62 +57,55 @@ public class InterCityRouteService {
     }
 
     /**
-     * Computes the fastest direct route from originCity to destCity across all
-     * active routes, stores the result in Redis, and returns the entry.
-     * Returns null if no route covers both cities.
+     * Finds the fastest scheduled route from originCity to destCity across all
+     * active routes, caches it in Redis, and returns the entry.
+     * Returns null if no active route covers both cities with valid timestamps.
      */
+    @Transactional(readOnly = true)
     public CityRouteEtaEntry computeAndCache(String originCity, String destCity) {
         log.info("Computing city ETA: {} → {}", originCity, destCity);
 
-        List<Route> activeRoutes = routeRepository.findByStatus(Route.Status.ACTIVE);
+        List<Route> activeRoutes = routeRepository.findByStatusWithPoints(Route.Status.ACTIVE);
         CityRouteEtaEntry best = null;
 
         for (Route route : activeRoutes) {
-            // Sort route points by sequence
             List<RoutePoint> points = route.getPoints()
                     .stream()
                     .sorted(Comparator.comparingInt(RoutePoint::getSequence))
                     .collect(Collectors.toList());
 
-            // Find origin and destination indices within this route
             int originIdx = indexOfCity(points, originCity);
-            int destIdx = indexOfCity(points, destCity);
+            int destIdx   = indexOfCity(points, destCity);
 
-            // Both cities must exist and origin must come before destination
             if (originIdx < 0 || destIdx < 0 || originIdx >= destIdx) {
                 continue;
             }
 
-            // Sub-path: from origin stop to destination stop
             List<RoutePoint> subPath = points.subList(originIdx, destIdx + 1);
+            RoutePoint originPoint = subPath.get(0);
+            RoutePoint destPoint   = subPath.get(subPath.size() - 1);
 
-            // Compute road distance along the sub-path via OSRM
-            double totalRoadMetres = computeRoadDistance(subPath);
-            if (totalRoadMetres <= 0) {
-                log.warn("OSRM returned 0 distance for route {} ({} → {})", route.getId(), originCity, destCity);
+            if (originPoint.getEndTime() == null || destPoint.getStartTime() == null) {
+                log.warn("Route {} missing timestamps for {} → {}", route.getId(), originCity, destCity);
                 continue;
             }
 
-            // Determine vehicle speed for this route
-            Vehicle.VehicleType vType = route.getVehicle() != null && route.getVehicle().getVehicleType() != null
-                    ? route.getVehicle().getVehicleType()
-                    : Vehicle.VehicleType.FOUR_WHEELER;
-            double speedMs = SPEED_MS.getOrDefault(vType, SPEED_MS.get(Vehicle.VehicleType.FOUR_WHEELER));
+            long travelSeconds = Duration.between(originPoint.getEndTime(), destPoint.getStartTime()).getSeconds();
+            if (travelSeconds <= 0) {
+                log.warn("Route {} has invalid schedule ({}s) for {} → {}", route.getId(), travelSeconds, originCity, destCity);
+                continue;
+            }
 
-            long travelSeconds = Math.round(totalRoadMetres / speedMs);
-            double totalKm = totalRoadMetres / 1000.0;
+            double totalKm = haversineKm(
+                    originPoint.getLatitude(), originPoint.getLongitude(),
+                    destPoint.getLatitude(),   destPoint.getLongitude());
 
             List<String> stopNames = subPath.stream()
                     .map(RoutePoint::getLocationName)
                     .collect(Collectors.toList());
 
             CityRouteEtaEntry candidate = new CityRouteEtaEntry(
-                    originCity,
-                    destCity,
-                    stopNames,
-                    totalKm,
-                    travelSeconds,
-                    Instant.now().getEpochSecond());
+                    originCity, destCity, stopNames, totalKm, travelSeconds, Instant.now().getEpochSecond());
 
             if (best == null || travelSeconds < best.getTotalTravelTimeSeconds()) {
                 best = candidate;
@@ -144,23 +114,21 @@ public class InterCityRouteService {
 
         if (best != null) {
             String key = EtaRedisKeys.cityRouteKey(originCity, destCity);
-            // etaRedisTemplate.opsForValue().set(key, best, Constant.TTL);
-            log.info("Cached {} → {} | {} km | {}s", originCity, destCity,
-                    String.format("%.1f", best.getTotalDistanceKm()),
-                    best.getTotalTravelTimeSeconds());
+            etaRedisTemplate.opsForValue().set(key, best, Constant.TTL);
+            log.info("Cached {} → {} | {:.1f} km | {}s", originCity, destCity,
+                    best.getTotalDistanceKm(), best.getTotalTravelTimeSeconds());
         } else {
-            log.warn("No direct route found: {} → {}", originCity, destCity);
+            log.warn("No schedulable route found: {} → {}", originCity, destCity);
         }
 
         return best;
     }
 
     /**
-     * Precomputes travel time for EVERY ordered city pair and writes all results
+     * Precomputes travel time for every ordered city pair and writes all results
      * to Redis. Called by the scheduled job.
-     *
-     * @return map of "originCity→destCity" → computed entry (or null on failure)
      */
+    @Transactional(readOnly = true)
     public Map<String, CityRouteEtaEntry> precomputeAllCityPairs() {
         List<String> cities = warehouseRepository.findAllDistinctCities();
         log.info("Precomputing city-pair ETAs for {} cities ({} pairs)",
@@ -170,8 +138,7 @@ public class InterCityRouteService {
 
         for (String origin : cities) {
             for (String dest : cities) {
-                if (origin.equals(dest))
-                    continue;
+                if (origin.equals(dest)) continue;
                 try {
                     CityRouteEtaEntry entry = computeAndCache(origin, dest);
                     results.put(origin + "→" + dest, entry);
@@ -184,20 +151,8 @@ public class InterCityRouteService {
         return results;
     }
 
-    /**
-     * Returns the speed (m/s) for a given vehicle type.
-     * Exposed so the routing engine can compute edge weights.
-     */
-    public static double getSpeedMs(Vehicle.VehicleType type) {
-        return SPEED_MS.getOrDefault(type, SPEED_MS.get(Vehicle.VehicleType.FOUR_WHEELER));
-    }
-
     // ── Internal helpers ─────────────────────────────────────────────────────
 
-    /**
-     * Find the first RoutePoint in the list whose locationName equals cityName
-     * (case-insensitive). Returns -1 if not found.
-     */
     private int indexOfCity(List<RoutePoint> points, String cityName) {
         for (int i = 0; i < points.size(); i++) {
             if (cityName.equalsIgnoreCase(points.get(i).getLocationName())) {
@@ -207,20 +162,13 @@ public class InterCityRouteService {
         return -1;
     }
 
-    /**
-     * Calls OSRM to compute the total road distance (metres) along a sequence
-     * of route points. Uses multi-stop routing for accuracy.
-     */
-    private double computeRoadDistance(List<RoutePoint> points) {
-        if (points.size() < 2)
-            return 0;
-
-        List<double[]> waypoints = points.stream()
-                .map(p -> new double[] { p.getLongitude(), p.getLatitude() })
-                .collect(Collectors.toList());
-
-        RouteResult result = osrmRouteClient.getMultiStopRoute(waypoints);
-        return result != null ? result.distanceMetres() : 0;
+    private double haversineKm(double lat1, double lon1, double lat2, double lon2) {
+        final double R = 6371.0;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                        * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 }
-// ikoojoiooookokookjik jimkkkol kolokolklop

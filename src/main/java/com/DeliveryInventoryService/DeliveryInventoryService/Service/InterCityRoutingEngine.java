@@ -5,14 +5,16 @@ import com.DeliveryInventoryService.DeliveryInventoryService.Model.Route;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.RoutePoint;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Vehicle;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.RouteRepository;
-import com.DeliveryInventoryService.DeliveryInventoryService.Repository.WarehouseRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.*;
+
+import org.springframework.transaction.annotation.Transactional;
 import java.util.stream.Collectors;
 
 /**
@@ -41,7 +43,6 @@ import java.util.stream.Collectors;
 public class InterCityRoutingEngine {
 
     private final RouteRepository routeRepository;
-    private final WarehouseRepository warehouseRepository;
     private final InterCityRouteService interCityRouteService;
 
     // ── DTOs ─────────────────────────────────────────────────────────────────
@@ -106,6 +107,7 @@ public class InterCityRoutingEngine {
      *
      * @throws NoSuchElementException if no route exists between the two cities
      */
+    @Transactional(readOnly = true)
     public OptimalRouteResult findOptimalRoute(String originCity, String destCity) {
         log.info("Finding optimal route: {} → {}", originCity, destCity);
 
@@ -125,6 +127,7 @@ public class InterCityRoutingEngine {
      * Returns all direct one-hop options between two cities, sorted by time.
      * Useful for the frontend to show alternative carrier options.
      */
+    @Transactional(readOnly = true)
     public List<CityHop> findDirectHops(String originCity, String destCity) {
         Map<String, List<GraphEdge>> graph = buildGraph();
         List<GraphEdge> edges = graph.getOrDefault(originCity, Collections.emptyList());
@@ -139,6 +142,7 @@ public class InterCityRoutingEngine {
     /**
      * Returns all cities reachable from originCity (direct edges only).
      */
+    @Transactional(readOnly = true)
     public List<String> reachableCities(String originCity) {
         Map<String, List<GraphEdge>> graph = buildGraph();
         return graph.getOrDefault(originCity, Collections.emptyList())
@@ -162,7 +166,7 @@ public class InterCityRoutingEngine {
      * the Redis cache has no entry for that specific pair.
      */
     private Map<String, List<GraphEdge>> buildGraph() {
-        List<Route> activeRoutes = routeRepository.findByStatus(Route.Status.ACTIVE);
+        List<Route> activeRoutes = routeRepository.findByStatusWithPoints(Route.Status.ACTIVE);
         Map<String, List<GraphEdge>> graph = new HashMap<>();
 
         for (Route route : activeRoutes) {
@@ -175,8 +179,6 @@ public class InterCityRoutingEngine {
                     ? route.getVehicle().getVehicleType()
                     : Vehicle.VehicleType.FOUR_WHEELER;
 
-            double speedMs = InterCityRouteService.getSpeedMs(vType);
-
             for (int i = 0; i < points.size() - 1; i++) {
                 RoutePoint from = points.get(i);
                 RoutePoint to = points.get(i + 1);
@@ -184,7 +186,6 @@ public class InterCityRoutingEngine {
                 String fromCity = from.getLocationName();
                 String toCity = to.getLocationName();
 
-                // Try to get distance from Redis cache for this city pair
                 long travelSeconds;
                 double distanceKm;
 
@@ -193,10 +194,18 @@ public class InterCityRoutingEngine {
                     travelSeconds = cached.getTotalTravelTimeSeconds();
                     distanceKm = cached.getTotalDistanceKm();
                 } else {
-                    // Fallback: Haversine × 1.3 road-factor
+                    if (from.getEndTime() == null || to.getStartTime() == null) {
+                        log.debug("Skipping edge {} → {}: missing timestamps on route {}", fromCity, toCity, route.getId());
+                        continue;
+                    }
+                    long scheduled = Duration.between(from.getEndTime(), to.getStartTime()).getSeconds();
+                    if (scheduled <= 0) {
+                        log.debug("Skipping edge {} → {}: invalid schedule ({}s) on route {}", fromCity, toCity, scheduled, route.getId());
+                        continue;
+                    }
+                    travelSeconds = scheduled;
                     distanceKm = haversineKm(from.getLatitude(), from.getLongitude(),
-                            to.getLatitude(), to.getLongitude()) * 1.3;
-                    travelSeconds = Math.round((distanceKm * 1000) / speedMs);
+                            to.getLatitude(), to.getLongitude());
                 }
 
                 GraphEdge edge = new GraphEdge(toCity, travelSeconds, distanceKm, vType, route.getId());

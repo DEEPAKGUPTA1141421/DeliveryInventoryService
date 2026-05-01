@@ -118,6 +118,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
+
+		<!-- Geohash encoding/decoding for 3-segment delivery distance cache -->
+		<dependency>
+			<groupId>ch.hsr</groupId>
+			<artifactId>geohash</artifactId>
+			<version>1.4.0</version>
+		</dependency>
 	</dependencies>
 
 	<dependencyManagement>
