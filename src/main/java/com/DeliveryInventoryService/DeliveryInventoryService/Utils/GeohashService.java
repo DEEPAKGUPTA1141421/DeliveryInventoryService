@@ -1,6 +1,5 @@
 package com.DeliveryInventoryService.DeliveryInventoryService.Utils;
 
-import ch.hsr.geohash.BoundingBox;
 import ch.hsr.geohash.GeoHash;
 import org.springframework.stereotype.Component;
 
@@ -48,10 +47,7 @@ public class GeohashService {
      * @return double[]{lat, lon}
      */
     public double[] decode(String hash) {
-        BoundingBox bb = GeoHash.fromGeohashString(hash).getBoundingBox();
-        return new double[]{
-                (bb.getMinLat() + bb.getMaxLat()) / 2.0,
-                (bb.getMinLon() + bb.getMaxLon()) / 2.0
-        };
+        ch.hsr.geohash.WGS84Point center = GeoHash.fromGeohashString(hash).getBoundingBox().getCenter();
+        return new double[]{ center.getLatitude(), center.getLongitude() };
     }
 }

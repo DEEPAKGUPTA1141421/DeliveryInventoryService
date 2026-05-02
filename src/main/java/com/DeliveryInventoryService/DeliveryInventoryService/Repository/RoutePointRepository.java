@@ -36,6 +36,9 @@ public interface RoutePointRepository extends JpaRepository<RoutePoint, UUID> {
             """)
     List<RoutePoint> findByCity(@Param("city") String city);
 
+    @Query("SELECT rp FROM RoutePoint rp WHERE rp.route.id = :routeId ORDER BY rp.sequence ASC")
+    List<RoutePoint> findPointsByRouteIdOrdered(@Param("routeId") java.util.UUID routeId);
+
 }
 // uhiuhji uhh uhh huuh huj
 // juj huhuhu kjju

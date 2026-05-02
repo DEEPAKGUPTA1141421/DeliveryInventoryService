@@ -53,11 +53,33 @@ public class RoutePoint {
     @Enumerated(EnumType.STRING)
     @Column(name = "point_type")
     private PointType pointType;
+
     @Column(nullable = false)
     private LocalDateTime startTime;
 
     @Column(nullable = false)
     private LocalDateTime endTime;
+
+    // ── Real-time tracking fields ─────────────────────────────────────────────
+
+    /** Last known latitude of the vehicle while on this leg. */
+    @Column(name = "current_lat")
+    private Double currentLat;
+
+    /** Last known longitude of the vehicle while on this leg. */
+    @Column(name = "current_lon")
+    private Double currentLon;
+
+    /**
+     * Dynamically updated expected departure time from this stop, accounting for
+     * accumulated delay. Null until the first location ping arrives.
+     */
+    @Column(name = "expected_end_time")
+    private LocalDateTime expectedEndTime;
+
+    /** Total delay in minutes relative to the scheduled endTime. 0 = on time. */
+    @Column(name = "delay_minutes")
+    private Long delayMinutes = 0L;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")

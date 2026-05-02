@@ -121,8 +121,9 @@ public class GeohashCacheService {
             long samples = 0;
 
             if (raw != null) {
-                Map<?, ?> map = objectMapper.convertValue(raw, Map.class);
-                currentAvg = ((Number) map.getOrDefault("avgKm", 0)).doubleValue();
+                @SuppressWarnings("unchecked")
+                Map<String, Object> map = objectMapper.convertValue(raw, Map.class);
+                currentAvg = ((Number) map.getOrDefault("avgKm",   0)).doubleValue();
                 samples    = ((Number) map.getOrDefault("samples", 0)).longValue();
             }
 

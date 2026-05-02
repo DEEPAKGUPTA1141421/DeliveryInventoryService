@@ -4,7 +4,13 @@
       "Bash(mvn compile *)",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\HIMAN\\\\Downloads\\\\Backend\\\\DeliveryInventoryService\\\\src\\\\main\\\\java\" -Recurse -Filter \"*Service.java\")",
       "Bash(Select-Object FullName)",
-      "Bash(mvn test *)"
+      "Bash(mvn test *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\HIMAN\\\\Downloads\\\\Backend\\\\DeliveryInventoryService\" -Recurse -Directory)",
+      "Bash(Select-Object -First 20)",
+      "Bash(Format-Table FullName)",
+      "Bash(xargs grep *)",
+      "Bash(mvn dependency:get -Dartifact=ch.hsr:geohash:1.4.0 -q)",
+      "Bash(jar tf *)"
     ]
   }
 }

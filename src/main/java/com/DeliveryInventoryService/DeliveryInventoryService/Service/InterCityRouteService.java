@@ -16,7 +16,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.*;
+import java.util.Objects;
 
 import org.springframework.transaction.annotation.Transactional;
 import java.util.stream.Collectors;
@@ -90,7 +92,12 @@ public class InterCityRouteService {
                 continue;
             }
 
-            long travelSeconds = Duration.between(originPoint.getEndTime(), destPoint.getStartTime()).getSeconds();
+            // Effective departure from origin + expected arrival at destination
+            LocalDateTime departure         = effectiveDeparture(originPoint);
+            LocalDateTime expectedArrival   = destPoint.getStartTime()
+                    .plusMinutes(effectiveDelayMinutes(destPoint));
+            long travelSeconds = Duration.between(departure, expectedArrival).getSeconds();
+
             if (travelSeconds <= 0) {
                 log.warn("Route {} has invalid schedule ({}s) for {} → {}", route.getId(), travelSeconds, originCity, destCity);
                 continue;
@@ -114,7 +121,8 @@ public class InterCityRouteService {
 
         if (best != null) {
             String key = EtaRedisKeys.cityRouteKey(originCity, destCity);
-            etaRedisTemplate.opsForValue().set(key, best, Constant.TTL);
+            etaRedisTemplate.opsForValue().set(
+                    Objects.requireNonNull(key), best, Objects.requireNonNull(Constant.TTL));
             log.info("Cached {} → {} | {:.1f} km | {}s", originCity, destCity,
                     best.getTotalDistanceKm(), best.getTotalTravelTimeSeconds());
         } else {
@@ -160,6 +168,24 @@ public class InterCityRouteService {
             }
         }
         return -1;
+    }
+
+    /**
+     * Returns the effective departure time for a RoutePoint:
+     * Redis real-time value → DB expectedEndTime → scheduled endTime.
+     */
+    private LocalDateTime effectiveDeparture(RoutePoint point) {
+        Object raw = etaRedisTemplate.opsForValue().get(
+                Objects.requireNonNull(RouteDelayService.etaRedisKey(point.getId())));
+        if (raw != null) {
+            try { return LocalDateTime.parse(raw.toString()); } catch (Exception ignored) {}
+        }
+        return point.getExpectedEndTime() != null ? point.getExpectedEndTime() : point.getEndTime();
+    }
+
+    /** Returns accumulated delay minutes at a RoutePoint, or 0 if none recorded. */
+    private long effectiveDelayMinutes(RoutePoint point) {
+        return point.getDelayMinutes() != null ? point.getDelayMinutes() : 0L;
     }
 
     private double haversineKm(double lat1, double lon1, double lat2, double lon2) {

@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.*;
 
 import org.springframework.transaction.annotation.Transactional;
@@ -198,7 +199,11 @@ public class InterCityRoutingEngine {
                         log.debug("Skipping edge {} → {}: missing timestamps on route {}", fromCity, toCity, route.getId());
                         continue;
                     }
-                    long scheduled = Duration.between(from.getEndTime(), to.getStartTime()).getSeconds();
+                    // Effective departure from 'from', expected arrival at 'to' with any delay
+                    LocalDateTime departure      = from.getExpectedEndTime() != null ? from.getExpectedEndTime() : from.getEndTime();
+                    long delayMinutes            = to.getDelayMinutes() != null ? to.getDelayMinutes() : 0L;
+                    LocalDateTime arrival        = to.getStartTime().plusMinutes(delayMinutes);
+                    long scheduled               = Duration.between(departure, arrival).getSeconds();
                     if (scheduled <= 0) {
                         log.debug("Skipping edge {} → {}: invalid schedule ({}s) on route {}", fromCity, toCity, scheduled, route.getId());
                         continue;
