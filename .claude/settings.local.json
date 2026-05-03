@@ -10,7 +10,8 @@
       "Bash(Format-Table FullName)",
       "Bash(xargs grep *)",
       "Bash(mvn dependency:get -Dartifact=ch.hsr:geohash:1.4.0 -q)",
-      "Bash(jar tf *)"
+      "Bash(jar tf *)",
+      "Bash(grep -v \"^\\\\[ERROR\\\\] $\")"
     ]
   }
 }

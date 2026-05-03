@@ -1,0 +1,87 @@
+flowchart TD
+  App[DeliveryInventoryServiceApplication]
+
+  App --> Controllers[REST Controllers]
+  App --> Services[Business Services]
+  App --> Repositories[Spring Data JPA Repositories]
+  App --> Kafka[Kafka Producers and Consumers]
+  App --> Config[Configuration]
+  App --> Utils[Routing and Geo Utilities]
+
+  Controllers --> OrderController
+  Controllers --> RiderController
+  Controllers --> WarehouseAdminController
+  Controllers --> WarehouseController
+  Controllers --> ServiceAvailabilityController
+  Controllers --> DeliveryEstimateController
+  Controllers --> VehicleTrackingController
+  Controllers --> HealthCheckController
+
+  OrderController --> OrderService
+  OrderController --> OrderRepository
+  OrderController --> WarehouseRepository
+  OrderController --> RiderRepository
+  OrderController --> InterCityEtaRefreshJob
+  OrderController --> GeohashCacheService
+  OrderController --> GoogleDistanceMatrix
+  OrderController --> OsrmDistanceMatrix
+
+  RiderController --> RiderService
+  WarehouseController --> WarehouseService
+  WarehouseAdminController --> ParcelService
+  WarehouseAdminController --> ShipmentService
+  ServiceAvailabilityController --> ServiceAvailabilityService
+  DeliveryEstimateController --> DeliverySegmentService
+  VehicleTrackingController --> VehicleLocationProducer
+
+  OrderService --> OrderRepository
+  OrderService --> WarehouseRepository
+  OrderService --> RouteRepository
+  OrderService --> GeoUtils
+
+  RiderService --> RiderRepository
+  RiderService --> VehicleRepository
+  RiderService --> RouteRepository
+  RiderService --> RoutePointRepository
+  RiderService --> Cloudinary[(Cloudinary)]
+
+  ParcelService --> ParcelRepository
+  ParcelService --> OrderRepository
+  ParcelService --> RiderRepository
+  ParcelService --> WarehouseRepository
+  ParcelService --> OtpLogRepository
+  ParcelService --> NotificationService
+  ParcelService --> Redis[(Redis)]
+
+  ShipmentService --> ShipmentRepository
+  ShipmentService --> ParcelRepository
+  ShipmentService --> OrderRepository
+  ShipmentService --> WarehouseRepository
+  ShipmentService --> ParcelService
+  ShipmentService --> RiderRepository
+  ShipmentService --> Redis
+
+  DeliverySegmentService --> WarehouseRepository
+  DeliverySegmentService --> GeohashService
+  DeliverySegmentService --> GeohashCacheService
+  GeohashCacheService --> Redis
+
+  InterCityRouteService --> RouteRepository
+  InterCityRouteService --> WarehouseRepository
+  InterCityRouteService --> Redis
+
+  EtaCalculationService --> VehicleScheduleRepository
+  EtaCalculationService --> WarehouseRepository
+  EtaCalculationService --> Redis
+
+  VehicleLocationProducer --> KafkaTopic[(Kafka topic)]
+  BookingConfirmedConsumer --> KafkaTopic
+  BookingConfirmedConsumer --> OrderService
+  ParcelLifecycleProducer --> KafkaTopic
+  VehicleLocationConsumer --> KafkaTopic
+  VehicleLocationConsumer --> RouteDelayService
+  RouteDelayService --> RoutePointRepository
+  RouteDelayService --> Redis
+
+  Repositories --> Database[(PostgreSQL / JPA)]
+

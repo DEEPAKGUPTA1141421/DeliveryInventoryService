@@ -1,0 +1,35 @@
+sequenceDiagram
+  autonumber
+
+  participant Client
+  participant OrderController
+  participant OrderService
+  participant WarehouseRepository
+  participant OrderRepository
+  participant DB as PostgreSQL
+
+  Client->>OrderController: POST /api/v1/orders
+  OrderController->>OrderService: createOrder(OrderRequestDTO)
+  OrderService->>WarehouseRepository: findAll()
+  WarehouseRepository->>DB: load warehouses
+  OrderService->>OrderService: find nearest warehouse by GeoUtils.distanceKm
+  OrderService->>OrderRepository: save(Order)
+  OrderRepository->>DB: insert orders row
+  OrderService-->>OrderController: ApiResponse(order, 201)
+  OrderController-->>Client: HTTP 201
+
+  participant TrackingClient
+  participant VehicleTrackingController
+  participant VehicleLocationProducer
+  participant Kafka
+  participant VehicleLocationConsumer
+  participant RouteDelayService
+  participant Redis
+
+  TrackingClient->>VehicleTrackingController: POST /api/v1/tracking/location
+  VehicleTrackingController->>VehicleLocationProducer: publish event
+  VehicleLocationProducer->>Kafka: vehicle location event
+  Kafka->>VehicleLocationConsumer: consume event
+  VehicleLocationConsumer->>RouteDelayService: process delay signal
+  RouteDelayService->>Redis: update ETA/delay cache
+

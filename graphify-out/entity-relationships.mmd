@@ -1,0 +1,88 @@
+erDiagram
+  ORDER {
+    UUID id
+    UUID customerId
+    UUID bookingId
+    UUID wareHouseId
+    UUID riderId
+    string originCity
+    string destCity
+    double weightKg
+    string orderNo
+    OrderStatus status
+    ServiceType serviceType
+  }
+
+  SHIPMENT {
+    UUID id
+    string shipmentNo
+    string shipmentType
+    UUID vehicleId
+    UUID vehicleScheduleId
+    UUID originWarehouseId
+    UUID destinationWarehouseId
+    ShipmentStatus status
+  }
+
+  PARCEL {
+    UUID id
+    UUID orderId
+    double weightKg
+    UUID originWarehouseId
+    UUID currentWarehouseId
+    UUID destinationWarehouseId
+    UUID pickupRiderId
+    UUID deliveryRiderId
+    ParcelStatus status
+  }
+
+  VEHICLE {
+    UUID id
+    string vehicleNumber
+    VehicleType vehicleType
+    VehicleStatus status
+    double capacityKg
+    int maxParcels
+    UUID homeWarehouseId
+  }
+
+  RIDER {
+    UUID id
+  }
+
+  ROUTE {
+    UUID id
+    string routeName
+    string startLocation
+    string destinationLocation
+    Status status
+  }
+
+  ROUTE_POINT {
+    UUID id
+  }
+
+  WAREHOUSE {
+    UUID id
+  }
+
+  SERVICEABLE_PINCODE {
+    UUID id
+  }
+
+  LOCATION_EVENT {
+    UUID id
+  }
+
+  OTP_LOG {
+    UUID id
+  }
+
+  SHIPMENT ||--o{ ORDER : "orders.shipment_id"
+  SHIPMENT ||--o{ PARCEL : "parcels.shipment_id"
+  VEHICLE ||--o{ ROUTE : "routes.vehicle_id"
+  ROUTE ||--o{ ROUTE_POINT : "route_points.route_id"
+  RIDER ||--o| VEHICLE : "vehicles.rider_id"
+  WAREHOUSE ||--o{ ORDER : "orders.wareHouseId"
+  WAREHOUSE ||--o{ PARCEL : "parcel warehouse UUIDs"
+

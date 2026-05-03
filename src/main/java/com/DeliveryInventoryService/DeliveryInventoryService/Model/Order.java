@@ -81,7 +81,7 @@ public class Order {
     private Double volumeCubicMeter;
 
     private ZonedDateTime placedAt = ZonedDateTime
-            .now(ZoneId.of("Asia/Kolkata"));;
+            .now(ZoneId.of("Asia/Kolkata"));
     private ZonedDateTime expectedDeliveryDate;
 
     @Enumerated(EnumType.STRING)
