@@ -38,7 +38,7 @@ public class OrToolsVrpSolver {
     /**
      * Whether native libraries loaded successfully at JVM startup.
      * If false, solve() falls back to an empty-route map and the caller
-     * should retry with VRPCapacitySolver.
+     * should be treated as a hard failure — the caller throws IllegalStateException.
      */
     private static final boolean NATIVES_AVAILABLE;
 

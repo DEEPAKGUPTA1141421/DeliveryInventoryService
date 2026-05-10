@@ -20,9 +20,8 @@ public class KMeansClustering {
     private static final int MAX_ITERATIONS = 100;
     private static final int MIN_K = 1;
 
-    // Clusters with more stops than this threshold are handed to OR-Tools;
-    // smaller clusters use the faster greedy nearest-neighbour + 2-opt solver.
-    private static final int OR_TOOLS_THRESHOLD = 15;
+    // OR-Tools is always the primary solver. VRPCapacitySolver is kept only as
+    // a fallback for when OR-Tools native libraries are unavailable at runtime.
 
     private final WarehouseRepository warehouseRepository;
     private final Random random = new Random();
@@ -102,20 +101,24 @@ public class KMeansClustering {
 
             Warehouse depot = findDepotForCluster(clusterOrders, city);
 
-            Map<Integer, List<Order>> routes;
-            if (clusterOrders.size() > OR_TOOLS_THRESHOLD) {
-                logger.info("Cluster {} ({} stops) → OR-Tools solver", clusterId, clusterOrders.size());
-                OrToolsVrpSolver orSolver = new OrToolsVrpSolver(
-                        distanceMatrix, clusterOrders, riderCapacityKg, minRiders, 0);
-                routes = orSolver.solve();
-                // Fall back to greedy if OR-Tools returned nothing (native load failure, timeout, etc.)
-                if (routes.values().stream().allMatch(List::isEmpty)) {
-                    logger.warn("Cluster {} OR-Tools returned empty routes — falling back to greedy+2-opt", clusterId);
-                    routes = new VRPCapacitySolver(distanceMatrix, clusterOrders, riderCapacityKg, minRiders, 0).solve();
-                }
-            } else {
-                logger.info("Cluster {} ({} stops) → greedy+2-opt solver", clusterId, clusterOrders.size());
-                routes = new VRPCapacitySolver(distanceMatrix, clusterOrders, riderCapacityKg, minRiders, 0).solve();
+            // Single-stop clusters: OR-Tools treats node 0 as both depot and delivery,
+            // producing a valid but empty solution. Skip the solver entirely.
+            if (clusterOrders.size() == 1) {
+                logger.info("Cluster {} (1 stop) → trivial assignment, no VRP needed", clusterId);
+                Map<Integer, List<Order>> trivial = new HashMap<>();
+                trivial.put(0, new ArrayList<>(clusterOrders));
+                clusterRoutes.put(clusterId, trivial);
+                continue;
+            }
+
+            logger.info("Cluster {} ({} stops) → OR-Tools solver", clusterId, clusterOrders.size());
+            Map<Integer, List<Order>> routes = new OrToolsVrpSolver(
+                    distanceMatrix, clusterOrders, riderCapacityKg, minRiders, 0).solve();
+
+            if (routes.values().stream().allMatch(List::isEmpty)) {
+                throw new IllegalStateException(
+                        "OR-Tools returned no routes for cluster=" + clusterId +
+                        " (" + clusterOrders.size() + " stops). Check native library installation.");
             }
 
             logger.info("Cluster {} VRP complete: {} routes", clusterId, routes.size());
