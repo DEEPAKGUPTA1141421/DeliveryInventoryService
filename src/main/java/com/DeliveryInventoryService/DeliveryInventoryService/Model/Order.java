@@ -45,15 +45,29 @@ public class Order {
     private Double distance;
 
     private UUID riderId;
-    // assigned rider
+
+    @Column(nullable = false)
     private String originAddress;
-    private double originLat;
-    private double originLng;
+
+    @Column(nullable = false)
+    private Double originLat;
+
+    @Column(nullable = false)
+    private Double originLng;
+
+    @Column(nullable = false)
     private String originCity;
 
+    @Column(nullable = false)
     private String destAddress;
-    private double destLat;
-    private double destLng;
+
+    @Column(nullable = false)
+    private Double destLat;
+
+    @Column(nullable = false)
+    private Double destLng;
+
+    @Column(nullable = false)
     private String destCity;
 
     private double weightKg; // in kilograms
@@ -88,7 +102,7 @@ public class Order {
     private OrderStatus status = OrderStatus.CREATED; // CREATED, PICKUP_SCHEDULED, IN_TRANSIT, DELIVERED
 
     public enum OrderStatus {
-        CREATED, PICKUP_SCHEDULED, PICKED, WAREHOUSE, IN_TRANSIT, DELIVERED, CANCELLED, PENDING
+        CREATED, PICKUP_SCHEDULED, PICKED, WAREHOUSE, IN_TRANSIT, DELIVERED, CANCELLED, PENDING, ASSIGNED
     }
 
     public enum OrderPriority {
@@ -103,6 +117,20 @@ public class Order {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private ZonedDateTime updatedAt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
+
+    @PrePersist
+    void validateCoordinates() {
+        if (originLat == null || originLng == null || originLat == 0.0 || originLng == 0.0)
+            throw new IllegalStateException(
+                    "Order requires valid origin coordinates — originLat/originLng cannot be null or 0");
+        if (destLat == null || destLng == null || destLat == 0.0 || destLng == 0.0)
+            throw new IllegalStateException(
+                    "Order requires valid destination coordinates — destLat/destLng cannot be null or 0");
+        if (originCity == null || originCity.isBlank())
+            throw new IllegalStateException("Order requires originCity");
+        if (destCity == null || destCity.isBlank())
+            throw new IllegalStateException("Order requires destCity");
+    }
 
     public static String generateOrderNo() {
         int number = 100000 + random.nextInt(900000); // always 6 digits

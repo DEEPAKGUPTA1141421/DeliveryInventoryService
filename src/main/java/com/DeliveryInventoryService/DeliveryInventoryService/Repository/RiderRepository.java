@@ -17,4 +17,8 @@ public interface RiderRepository extends JpaRepository<Rider, UUID> {
         Optional<Rider> findByPhone(String phone);
 
         List<Rider> findByCity(String city);
+
+        List<Rider> findByWarehouseId(UUID warehouseId);
+
+        List<Rider> findByWarehouseIdAndStatus(UUID warehouseId, RiderStatus status);
 }

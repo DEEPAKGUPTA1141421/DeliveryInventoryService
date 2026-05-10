@@ -178,7 +178,7 @@ public class InterCityRoutingEngine {
 
             Vehicle.VehicleType vType = route.getVehicle() != null && route.getVehicle().getVehicleType() != null
                     ? route.getVehicle().getVehicleType()
-                    : Vehicle.VehicleType.FOUR_WHEELER;
+                    : Vehicle.VehicleType.FOURWHEELER;
 
             for (int i = 0; i < points.size() - 1; i++) {
                 RoutePoint from = points.get(i);
@@ -196,16 +196,19 @@ public class InterCityRoutingEngine {
                     distanceKm = cached.getTotalDistanceKm();
                 } else {
                     if (from.getEndTime() == null || to.getStartTime() == null) {
-                        log.debug("Skipping edge {} → {}: missing timestamps on route {}", fromCity, toCity, route.getId());
+                        log.debug("Skipping edge {} → {}: missing timestamps on route {}", fromCity, toCity,
+                                route.getId());
                         continue;
                     }
                     // Effective departure from 'from', expected arrival at 'to' with any delay
-                    LocalDateTime departure      = from.getExpectedEndTime() != null ? from.getExpectedEndTime() : from.getEndTime();
-                    long delayMinutes            = to.getDelayMinutes() != null ? to.getDelayMinutes() : 0L;
-                    LocalDateTime arrival        = to.getStartTime().plusMinutes(delayMinutes);
-                    long scheduled               = Duration.between(departure, arrival).getSeconds();
+                    LocalDateTime departure = from.getExpectedEndTime() != null ? from.getExpectedEndTime()
+                            : from.getEndTime();
+                    long delayMinutes = to.getDelayMinutes() != null ? to.getDelayMinutes() : 0L;
+                    LocalDateTime arrival = to.getStartTime().plusMinutes(delayMinutes);
+                    long scheduled = Duration.between(departure, arrival).getSeconds();
                     if (scheduled <= 0) {
-                        log.debug("Skipping edge {} → {}: invalid schedule ({}s) on route {}", fromCity, toCity, scheduled, route.getId());
+                        log.debug("Skipping edge {} → {}: invalid schedule ({}s) on route {}", fromCity, toCity,
+                                scheduled, route.getId());
                         continue;
                     }
                     travelSeconds = scheduled;

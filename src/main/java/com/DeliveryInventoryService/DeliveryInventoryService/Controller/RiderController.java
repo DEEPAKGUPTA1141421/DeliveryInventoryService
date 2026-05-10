@@ -29,7 +29,6 @@ public class RiderController {
      * Signup step API - progresses the rider onboarding step by step
      */
     @PostMapping("/signup")
-    @PrivateApi
     public ResponseEntity<?> signupStep(@RequestBody @Valid RiderSignupDTO riderRequest) {
         try {
             ApiResponse<Object> response = riderService.signupStep(riderRequest);

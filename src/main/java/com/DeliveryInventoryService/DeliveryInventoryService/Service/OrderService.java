@@ -15,7 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.RequiredArgsConstructor;
 
-import org.springframework.data.domain.jaxb.SpringDataJaxb.OrderDto;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,8 +44,7 @@ public class OrderService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
-    public void seedOrdersFromFile() throws IOException, InterruptedException {
-        // read file from resources
+    public void seedOrdersFromFile() throws IOException {
         InputStream inputStream = getClass().getClassLoader()
                 .getResourceAsStream("seed/orders_seed.json");
 
@@ -55,15 +54,17 @@ public class OrderService {
 
         List<OrderRequestDTO> orders = Arrays.asList(objectMapper.readValue(inputStream, OrderRequestDTO[].class));
 
+        int success = 0, failed = 0;
         for (OrderRequestDTO dto : orders) {
             ApiResponse<Object> response = createOrder(dto);
-            if (response.success() == false) {
-                System.out.println("Failed to create order from seed data: " + response.message());
+            if (!response.success()) {
+                System.out.println("Seed failed: " + response.message());
+                failed++;
             } else {
-                System.out.println("Created order from seed data: " + ((Order) response.data()).getId());
+                success++;
             }
-            Thread.sleep(2000);
         }
+        System.out.printf("Seed complete: %d created, %d failed%n", success, failed);
     }
 
     public ApiResponse<Object> createOrder(OrderRequestDTO request) {
@@ -74,9 +75,11 @@ public class OrderService {
             order.setOriginAddress(request.getOriginAddress());
             order.setOriginLat(request.getOriginLat());
             order.setOriginLng(request.getOriginLng());
+            order.setOriginCity(request.getOriginCity());
             order.setDestAddress(request.getDestAddress());
             order.setDestLat(request.getDestLat());
             order.setDestLng(request.getDestLng());
+            order.setDestCity(request.getDestCity());
             order.setWeightKg(request.getWeightKg());
             order.setWareHouseId(NearestWareHouse(request));
 
@@ -109,15 +112,39 @@ public class OrderService {
         return orderRepository.save(order);
     }
 
+    /**
+     * Finds the nearest active warehouse using a bounding-box pre-filter (avoids
+     * full table scan)
+     * then picks the closest match by Haversine within that box.
+     * Search radius doubles on each retry until a warehouse is found.
+     */
     private UUID NearestWareHouse(OrderRequestDTO request) {
-        Double destLat = request.getDestLat();
-        Double destLng = request.getDestLng();
+        double lat = request.getDestLat();
+        double lng = request.getDestLng();
 
-        return warehouseRepository.findAll().stream()
+        double radiusDeg = 1.5; // ~165 km initial search box
+        for (int attempt = 0; attempt < 3; attempt++) {
+            List<Warehouse> candidates = warehouseRepository.findActiveInBoundingBox(
+                    lat - radiusDeg, lat + radiusDeg,
+                    lng - radiusDeg, lng + radiusDeg);
+
+            if (!candidates.isEmpty()) {
+                return candidates.stream()
+                        .min(Comparator.comparingDouble(
+                                wh -> GeoUtils.distanceKm(lat, lng, wh.getLat(), wh.getLng())))
+                        .map(Warehouse::getId)
+                        .orElse(null);
+            }
+            radiusDeg *= 2;
+        }
+
+        // Final fallback: any active warehouse (should never reach here in prod)
+        return warehouseRepository.findByStatus(Warehouse.WarehouseStatus.ACTIVE)
+                .stream()
                 .min(Comparator.comparingDouble(
-                        wh -> GeoUtils.distanceKm(destLat, destLng, wh.getLat(), wh.getLng())))
+                        wh -> GeoUtils.distanceKm(lat, lng, wh.getLat(), wh.getLng())))
                 .map(Warehouse::getId)
-                .orElse(null); // return null if no warehouses found
+                .orElse(null);
     }
 
     private void createRoute(Order order) {

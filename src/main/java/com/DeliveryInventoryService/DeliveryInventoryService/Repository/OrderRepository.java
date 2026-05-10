@@ -23,8 +23,12 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
         Optional<Order> findByOrderNo(String orderNo);
 
-        List<Order> findByOriginCityAndStatusIn(String city,
-                        List<OrderStatus> statuses);
+        List<Order> findByOriginCityAndStatusIn(String city, List<OrderStatus> statuses);
+
+        List<Order> findByWareHouseIdAndStatusIn(UUID wareHouseId, List<OrderStatus> statuses);
+
+        @Query("SELECT DISTINCT o.wareHouseId FROM Order o WHERE o.status = :status AND o.wareHouseId IS NOT NULL")
+        List<UUID> findDistinctWareHouseIdsByStatus(@Param("status") OrderStatus status);
 }
 
 // njjoiuo9u y78y8iy7uhyu7y8ybjfhuh

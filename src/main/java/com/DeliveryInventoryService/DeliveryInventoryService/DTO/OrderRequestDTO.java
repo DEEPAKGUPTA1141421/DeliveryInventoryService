@@ -1,5 +1,8 @@
 package com.DeliveryInventoryService.DeliveryInventoryService.DTO;
 
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -19,16 +22,38 @@ public class OrderRequestDTO {
     @NotNull
     private UUID wareHouseId;
 
-    @NotNull
+    @NotBlank
     private String originAddress;
-    private double originLat;
-    private double originLng;
-    private String originCity;
+
     @NotNull
+    @DecimalMin(value = "-90.0",  message = "originLat must be >= -90")
+    @DecimalMax(value = "90.0",   message = "originLat must be <= 90")
+    private Double originLat;
+
+    @NotNull
+    @DecimalMin(value = "-180.0", message = "originLng must be >= -180")
+    @DecimalMax(value = "180.0",  message = "originLng must be <= 180")
+    private Double originLng;
+
+    @NotBlank
+    private String originCity;
+
+    @NotBlank
     private String destAddress;
-    private double destLat;
-    private double destLng;
+
+    @NotNull
+    @DecimalMin(value = "-90.0",  message = "destLat must be >= -90")
+    @DecimalMax(value = "90.0",   message = "destLat must be <= 90")
+    private Double destLat;
+
+    @NotNull
+    @DecimalMin(value = "-180.0", message = "destLng must be >= -180")
+    @DecimalMax(value = "180.0",  message = "destLng must be <= 180")
+    private Double destLng;
+
+    @NotBlank
     private String destCity;
+
     private double weightKg;
 
     private String serviceType; // STANDARD or EXPRESS

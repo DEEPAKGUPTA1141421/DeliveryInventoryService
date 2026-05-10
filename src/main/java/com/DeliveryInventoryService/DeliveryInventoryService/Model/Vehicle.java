@@ -78,12 +78,12 @@ public class Vehicle {
     private ZonedDateTime updatedAt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
 
     public enum VehicleType {
-        FOUR_WHEELER,
+        BIKE,
         AUTO,
-        PICKUP,
-        TRAIN,
+        FOURWHEELER,
+        VAN,
         BUS,
-        MOTORCYCLE
+        PICKUP
     }
 
     public enum Status {

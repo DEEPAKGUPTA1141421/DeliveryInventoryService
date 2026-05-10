@@ -2,7 +2,6 @@ package com.DeliveryInventoryService.DeliveryInventoryService.Controller;
 
 import com.DeliveryInventoryService.DeliveryInventoryService.DTO.ApiResponse;
 import com.DeliveryInventoryService.DeliveryInventoryService.DTO.OrderRequestDTO;
-import com.DeliveryInventoryService.DeliveryInventoryService.DTO.network.RiderIdResponseDto;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Order;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Rider;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Warehouse;
@@ -15,8 +14,6 @@ import com.DeliveryInventoryService.DeliveryInventoryService.Service.OrderServic
 import com.DeliveryInventoryService.DeliveryInventoryService.Utils.GeoUtils;
 import com.DeliveryInventoryService.DeliveryInventoryService.Utils.GeohashService;
 import com.DeliveryInventoryService.DeliveryInventoryService.Utils.GoogleDistanceMatrix;
-import com.DeliveryInventoryService.DeliveryInventoryService.Utils.KMeansClustering;
-import com.DeliveryInventoryService.DeliveryInventoryService.Utils.OsrmDistanceMatrix;
 import com.DeliveryInventoryService.DeliveryInventoryService.Utils.cronjob.InterCityEtaRefreshJob;
 
 import jakarta.validation.Valid;
@@ -26,7 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
@@ -41,7 +37,6 @@ public class OrderController {
     private final OrderService orderService;
     private final OrderRepository orderRepository;
     private final GoogleDistanceMatrix googleDistanceMatrix;
-    private final OsrmDistanceMatrix osrmDistanceMatrix;
     private final WarehouseRepository warehouseRepository;
     private final RiderRepository riderRepository;
     private final InterCityEtaRefreshJob interCityEtaRefreshJob;
@@ -79,28 +74,6 @@ public class OrderController {
         // List<Warehouse> warehouse = warehouseRepository.findByCity("Delhi");
         List<Rider> riders = riderRepository.findByCity("Delhi");
         return ResponseEntity.ok(riders);
-    }
-
-    @GetMapping("/distance-matrix")
-    public ResponseEntity<?> getMatrix() throws Exception {
-        List<Order> orders = orderRepository.findAll(); // or a subset
-        double[][] matrix = osrmDistanceMatrix.buildDistanceMatrix(orders);
-
-        KMeansClustering kmeans = new KMeansClustering(5, 100);
-        System.out.println(("1"));
-
-        Map<Integer, Map<Integer, List<Order>>> allRoutes = kmeans.clusterAndSolveVRP(orders, matrix, 50, "Delhi");
-
-        for (var clusterEntry : allRoutes.entrySet()) {
-            int clusterId = clusterEntry.getKey();
-            System.out.println("Cluster " + clusterId);
-            for (var riderEntry : clusterEntry.getValue().entrySet()) {
-                System.out.println("  Rider " + riderEntry.getKey() + " route: " + riderEntry.getValue());
-            }
-            System.out.println("=======================================================");
-        }
-
-        return ResponseEntity.ok("Success");
     }
 
     @GetMapping("/test2")

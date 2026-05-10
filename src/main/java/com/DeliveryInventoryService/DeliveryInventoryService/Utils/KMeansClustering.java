@@ -1,288 +1,235 @@
 package com.DeliveryInventoryService.DeliveryInventoryService.Utils;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
-import java.util.UUID;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Order;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Warehouse;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.WarehouseRepository;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
+import java.util.*;
+
+@Component
+@RequiredArgsConstructor
 public class KMeansClustering {
 
     private static final Logger logger = LoggerFactory.getLogger(KMeansClustering.class);
 
-    private int k;
-    private int maxIterations;
+    private static final int DEFAULT_K_DENOMINATOR = 12; // target ~12 stops per cluster
+    private static final int MAX_ITERATIONS = 100;
+    private static final int MIN_K = 1;
+
+    // Clusters with more stops than this threshold are handed to OR-Tools;
+    // smaller clusters use the faster greedy nearest-neighbour + 2-opt solver.
+    private static final int OR_TOOLS_THRESHOLD = 15;
+
+    private final WarehouseRepository warehouseRepository;
     private final Random random = new Random();
-
-    @Autowired
-    private WarehouseRepository warehouseRepository;
-
-    public KMeansClustering(int k, int maxIterations) {
-        this.k = k;
-        this.maxIterations = maxIterations;
-        logger.info("KMeansClustering initialized with k={} and maxIterations={}", k, maxIterations);
-    }
 
     // ---------------------------------------------------------------
     // CLUSTERING
     // ---------------------------------------------------------------
+
+    /**
+     * Clusters orders using KMeans++ initialisation.
+     * k is computed as ceil(orders.size / DEFAULT_K_DENOMINATOR), capped at orders.size.
+     * All distances use Haversine so centroids are geographically correct.
+     */
     public Map<Integer, List<Order>> clusterOrders(List<Order> orders) {
-        logger.info("Starting KMeans Clustering for {} orders...", orders.size());
-
         int n = orders.size();
-        if (n == 0 || k <= 0) {
-            logger.error("Invalid clustering input: orders={}, k={}", n, k);
-            throw new IllegalArgumentException("Invalid input: no orders or clusters");
-        }
+        if (n == 0) throw new IllegalArgumentException("Cannot cluster empty order list");
 
-        // STEP 1: INITIALIZE CENTROIDS
-        logger.info("Selecting {} random centroids...", k);
-        List<double[]> centroids = new ArrayList<>();
-        Set<Integer> used = new HashSet<>();
+        int k = Math.max(MIN_K, (int) Math.ceil((double) n / DEFAULT_K_DENOMINATOR));
+        k = Math.min(k, n);
 
-        while (centroids.size() < k) {
-            int idx = random.nextInt(n);
-            if (!used.contains(idx)) {
-                used.add(idx);
-                centroids.add(new double[] {
-                        orders.get(idx).getOriginLat(),
-                        orders.get(idx).getOriginLng()
-                });
-                logger.debug("Centroid {} initialized at lat={}, lng={}",
-                        centroids.size() - 1,
-                        orders.get(idx).getOriginLat(),
-                        orders.get(idx).getOriginLng());
-            }
-        }
+        logger.info("KMeans: {} orders → k={} clusters (target {}/cluster)", n, k, DEFAULT_K_DENOMINATOR);
 
+        List<double[]> centroids = initKMeansPlusPlus(orders, k);
         Map<Integer, List<Order>> clusters = new HashMap<>();
 
-        // STEP 2: ITERATE
-        logger.info("Running clustering iterations up to {} max cycles", maxIterations);
-
-        for (int iter = 0; iter < maxIterations; iter++) {
-            logger.debug("Iteration {}", iter + 1);
+        for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
             clusters.clear();
-            for (int i = 0; i < k; i++)
-                clusters.put(i, new ArrayList<>());
+            for (int i = 0; i < k; i++) clusters.put(i, new ArrayList<>());
 
-            // Assignment step
             for (Order order : orders) {
-                int clusterId = nearestCentroid(order, centroids);
-                clusters.get(clusterId).add(order);
+                int closest = nearestCentroidIndex(order, centroids);
+                clusters.get(closest).add(order);
             }
 
-            // Update centroids
-            List<double[]> newCentroids = new ArrayList<>();
-            for (int i = 0; i < k; i++) {
-                List<Order> clusterOrders = clusters.get(i);
-                if (clusterOrders.isEmpty()) {
-                    logger.warn("Cluster {} empty, retaining old centroid.", i);
-                    newCentroids.add(centroids.get(i));
-                    continue;
-                }
+            List<double[]> newCentroids = recomputeCentroids(clusters, centroids, k);
 
-                double sumLat = 0, sumLng = 0;
-                for (Order o : clusterOrders) {
-                    sumLat += o.getOriginLat();
-                    sumLng += o.getOriginLng();
-                }
-                newCentroids.add(new double[] {
-                        sumLat / clusterOrders.size(),
-                        sumLng / clusterOrders.size()
-                });
-            }
-
-            // Check convergence
-            boolean converged = true;
-            for (int i = 0; i < k; i++) {
-                double movement = distance(centroids.get(i)[0], centroids.get(i)[1], newCentroids.get(i)[0],
-                        newCentroids.get(i)[1]);
-                logger.debug("Centroid {} shift distance = {}", i, movement);
-                if (movement > 1e-6)
-                    converged = false;
-            }
-
-            centroids = newCentroids;
-            if (converged) {
-                logger.info("Convergence reached at iteration {}", iter + 1);
+            if (hasConverged(centroids, newCentroids)) {
+                logger.info("KMeans converged at iteration {}", iter + 1);
                 break;
             }
+            centroids = newCentroids;
         }
 
-        logger.info("KMeans clustering completed.");
-        clusters.forEach((key, value) -> logger.info("Cluster {} contains {} orders.", key, value.size()));
-
+        clusters.forEach((id, list) ->
+                logger.info("Cluster {} → {} orders", id, list.size()));
         return clusters;
     }
 
     // ---------------------------------------------------------------
-    // VRP EXECUTION
+    // VRP PIPELINE ENTRY POINT
     // ---------------------------------------------------------------
+
     public Map<Integer, Map<Integer, List<Order>>> clusterAndSolveVRP(
             List<Order> orders,
             double[][] distanceMatrix,
             int riderCapacityKg,
             String city) throws Exception {
 
-        logger.info("Starting cluster + VRP pipeline for city={} with rider capacity={}kg", city, riderCapacityKg);
+        logger.info("VRP pipeline: city={}, orders={}, capacity={}kg", city, orders.size(), riderCapacityKg);
 
         Map<Integer, List<Order>> clusters = clusterOrders(orders);
-
-        logger.info("Total clusters generated = {}", clusters.size());
-
         Map<Integer, Map<Integer, List<Order>>> clusterRoutes = new HashMap<>();
 
         for (Map.Entry<Integer, List<Order>> entry : clusters.entrySet()) {
-
             int clusterId = entry.getKey();
             List<Order> clusterOrders = entry.getValue();
 
             if (clusterOrders.isEmpty()) {
-                logger.warn("Cluster {} empty. Skipping.", clusterId);
+                logger.warn("Cluster {} is empty — skipping", clusterId);
                 continue;
             }
 
-            logger.info("Processing VRP for cluster {} with {} orders…", clusterId, clusterOrders.size());
+            int minRiders = minimumRidersRequired(clusterOrders, riderCapacityKg);
+            if (minRiders == -1) throw new Exception("Cannot satisfy capacity constraints for cluster " + clusterId);
 
-            int minRiders = MinimumRiderToFullFillTheRequest(clusterOrders, riderCapacityKg);
+            logger.info("Cluster {} → {} orders, {} riders needed", clusterId, clusterOrders.size(), minRiders);
 
-            logger.info("Cluster {} requires minimum {} riders", clusterId, minRiders);
+            Warehouse depot = findDepotForCluster(clusterOrders, city);
 
-            if (minRiders == -1) {
-                logger.error("Cluster {} cannot be fulfilled due to configuration failure", clusterId);
-                throw new Exception("Cannot solve due to invalid rider requirement");
+            Map<Integer, List<Order>> routes;
+            if (clusterOrders.size() > OR_TOOLS_THRESHOLD) {
+                logger.info("Cluster {} ({} stops) → OR-Tools solver", clusterId, clusterOrders.size());
+                OrToolsVrpSolver orSolver = new OrToolsVrpSolver(
+                        distanceMatrix, clusterOrders, riderCapacityKg, minRiders, 0);
+                routes = orSolver.solve();
+                // Fall back to greedy if OR-Tools returned nothing (native load failure, timeout, etc.)
+                if (routes.values().stream().allMatch(List::isEmpty)) {
+                    logger.warn("Cluster {} OR-Tools returned empty routes — falling back to greedy+2-opt", clusterId);
+                    routes = new VRPCapacitySolver(distanceMatrix, clusterOrders, riderCapacityKg, minRiders, 0).solve();
+                }
+            } else {
+                logger.info("Cluster {} ({} stops) → greedy+2-opt solver", clusterId, clusterOrders.size());
+                routes = new VRPCapacitySolver(distanceMatrix, clusterOrders, riderCapacityKg, minRiders, 0).solve();
             }
 
-            Warehouse depot = findWareHouseOfCity(clusterOrders, city);
-
-            logger.debug("Selected warehouse {} at lat={} lng={}", depot.getId(), depot.getLat(), depot.getLng());
-
-            VRPCapacitySolver solver = new VRPCapacitySolver(
-                    distanceMatrix,
-                    clusterOrders,
-                    riderCapacityKg,
-                    minRiders,
-                    0);
-
-            Map<Integer, List<Order>> routes = solver.solve();
-
-            logger.info("VRP complete for cluster {}. Assigned riders={}", clusterId, routes.size());
+            logger.info("Cluster {} VRP complete: {} routes", clusterId, routes.size());
 
             clusterRoutes.put(clusterId, routes);
         }
 
-        logger.info("All clusters processed. VRP pipeline finished.");
-
+        logger.info("VRP pipeline finished for city={}", city);
         return clusterRoutes;
     }
 
     // ---------------------------------------------------------------
-    // UTILITY + SUPPORT FUNCTIONS
+    // INTERNALS
     // ---------------------------------------------------------------
-    private int nearestCentroid(Order order, List<double[]> centroids) {
-        int clusterId = -1;
+
+    /** KMeans++ initialisation — spreads initial centroids apart. */
+    private List<double[]> initKMeansPlusPlus(List<Order> orders, int k) {
+        List<double[]> centroids = new ArrayList<>();
+        // Pick first centroid at random
+        Order first = orders.get(random.nextInt(orders.size()));
+        centroids.add(new double[]{first.getOriginLat(), first.getOriginLng()});
+
+        for (int c = 1; c < k; c++) {
+            double[] distances = new double[orders.size()];
+            double total = 0;
+            for (int i = 0; i < orders.size(); i++) {
+                double minDist = Double.MAX_VALUE;
+                for (double[] centroid : centroids) {
+                    double d = GeoUtils.distanceKm(orders.get(i).getOriginLat(), orders.get(i).getOriginLng(),
+                            centroid[0], centroid[1]);
+                    minDist = Math.min(minDist, d * d); // squared for probability weighting
+                }
+                distances[i] = minDist;
+                total += minDist;
+            }
+            // Weighted random selection
+            double threshold = random.nextDouble() * total;
+            double cumulative = 0;
+            int chosen = orders.size() - 1;
+            for (int i = 0; i < orders.size(); i++) {
+                cumulative += distances[i];
+                if (cumulative >= threshold) { chosen = i; break; }
+            }
+            Order pick = orders.get(chosen);
+            centroids.add(new double[]{pick.getOriginLat(), pick.getOriginLng()});
+        }
+        return centroids;
+    }
+
+    private int nearestCentroidIndex(Order order, List<double[]> centroids) {
+        int best = 0;
         double minDist = Double.MAX_VALUE;
-
         for (int i = 0; i < centroids.size(); i++) {
-            double[] c = centroids.get(i);
-            double d = distance(order.getOriginLat(), order.getOriginLng(), c[0], c[1]);
-            if (d < minDist) {
-                minDist = d;
-                clusterId = i;
+            double d = GeoUtils.distanceKm(order.getOriginLat(), order.getOriginLng(),
+                    centroids.get(i)[0], centroids.get(i)[1]);
+            if (d < minDist) { minDist = d; best = i; }
+        }
+        return best;
+    }
+
+    private List<double[]> recomputeCentroids(Map<Integer, List<Order>> clusters,
+                                               List<double[]> oldCentroids, int k) {
+        List<double[]> newCentroids = new ArrayList<>();
+        for (int i = 0; i < k; i++) {
+            List<Order> members = clusters.get(i);
+            if (members == null || members.isEmpty()) {
+                newCentroids.add(oldCentroids.get(i)); // retain old
+                continue;
             }
+            double sumLat = members.stream().mapToDouble(Order::getOriginLat).sum();
+            double sumLng = members.stream().mapToDouble(Order::getOriginLng).sum();
+            newCentroids.add(new double[]{sumLat / members.size(), sumLng / members.size()});
         }
-        return clusterId;
+        return newCentroids;
     }
 
-    private double distance(double lat1, double lon1, double lat2, double lon2) {
-        double dLat = lat1 - lat2;
-        double dLon = lon1 - lon2;
-        return Math.sqrt(dLat * dLat + dLon * dLon);
-    }
-
-    public int MinimumRiderToFullFillTheRequest(List<Order> orders, int riderCapacityKg) {
-        int min_rider = 1;
-        int max_rider = orders.size();
-        int ans = -1;
-
-        while (min_rider <= max_rider) {
-            int mid = min_rider + (max_rider - min_rider) / 2;
-            if (isPossible(mid, orders, riderCapacityKg)) {
-                ans = mid;
-                max_rider = mid - 1; // try fewer riders
-            } else {
-                min_rider = mid + 1; // need more riders
-            }
-        }
-        return ans;
-    }
-
-    /**
-     * Check if `mid` riders are enough to handle all orders within capacity.
-     */
-    private boolean isPossible(int mid, List<Order> orders, int riderCapacityKg) {
-        // Total capacity available
-        double totalCapacity = mid * riderCapacityKg;
-        double totalWeight = orders.stream().mapToDouble(Order::getWeightKg).sum();
-        if (totalWeight > totalCapacity) {
-            return false;
-        }
-        for (Order o : orders) {
-            if (o.getWeightKg() > riderCapacityKg) {
+    private boolean hasConverged(List<double[]> oldCentroids, List<double[]> newCentroids) {
+        for (int i = 0; i < oldCentroids.size(); i++) {
+            if (GeoUtils.distanceKm(oldCentroids.get(i)[0], oldCentroids.get(i)[1],
+                    newCentroids.get(i)[0], newCentroids.get(i)[1]) > 0.01) { // 10m threshold
                 return false;
             }
         }
         return true;
     }
 
-    private Warehouse findWareHouseOfCity(List<Order> clusterOrders, String city) {
-        logger.info("Finding warehouse for city={}", city);
-
-        List<Warehouse> wareHousePerCity = warehouseRepository.findByCity(city);
-
-        if (wareHousePerCity.isEmpty()) {
-            logger.error("No warehouses found for city={}", city);
-            throw new IllegalArgumentException("No WareHouse For That City");
+    /** Binary search for minimum riders needed to satisfy total weight and per-order constraints. */
+    public int minimumRidersRequired(List<Order> orders, int riderCapacityKg) {
+        int lo = 1, hi = orders.size(), ans = -1;
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2;
+            if (canFulfill(mid, orders, riderCapacityKg)) { ans = mid; hi = mid - 1; }
+            else lo = mid + 1;
         }
-        if (wareHousePerCity.size() == 1) {
-            logger.debug("Only one warehouse exists — using warehouse={}", wareHousePerCity.get(0).getId());
-            return wareHousePerCity.get(0);
-        }
-
-        return findAverageNearestWareHouse(clusterOrders, wareHousePerCity);
+        return ans;
     }
 
-    private Warehouse findAverageNearestWareHouse(List<Order> clusterOrders, List<Warehouse> wareHousePerCity) {
-        logger.info("Finding nearest warehouse to cluster centroid...");
+    private boolean canFulfill(int riders, List<Order> orders, int capacityKg) {
+        double totalWeight = orders.stream().mapToDouble(Order::getWeightKg).sum();
+        if (totalWeight > (double) riders * capacityKg) return false;
+        return orders.stream().noneMatch(o -> o.getWeightKg() > capacityKg);
+    }
 
-        double avgLat = clusterOrders.stream().mapToDouble(Order::getOriginLat).average().orElse(0);
-        double avgLng = clusterOrders.stream().mapToDouble(Order::getOriginLng).average().orElse(0);
+    private Warehouse findDepotForCluster(List<Order> orders, String city) {
+        List<Warehouse> warehouses = warehouseRepository.findByCity(city);
+        if (warehouses.isEmpty()) throw new IllegalArgumentException("No warehouse found for city: " + city);
+        if (warehouses.size() == 1) return warehouses.get(0);
 
-        Warehouse nearestWarehouse = null;
-        double minDistance = Double.MAX_VALUE;
+        double avgLat = orders.stream().mapToDouble(Order::getOriginLat).average().orElse(0);
+        double avgLng = orders.stream().mapToDouble(Order::getOriginLng).average().orElse(0);
 
-        for (Warehouse wh : wareHousePerCity) {
-            double distance = GeoUtils.distanceKm(avgLat, avgLng, wh.getLat(), wh.getLng());
-            if (distance < minDistance) {
-                minDistance = distance;
-                nearestWarehouse = wh;
-            }
-        }
-
-        logger.debug("Nearest warehouse selected: id={}, distance={}", nearestWarehouse.getId(), minDistance);
-
-        return nearestWarehouse;
+        return warehouses.stream()
+                .min(Comparator.comparingDouble(
+                        wh -> GeoUtils.distanceKm(avgLat, avgLng, wh.getLat(), wh.getLng())))
+                .orElseThrow();
     }
 }

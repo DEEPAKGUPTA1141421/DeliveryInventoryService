@@ -38,15 +38,22 @@ public class RiderService {
     private final RoutePointRepository routePointRepository;
 
     public ApiResponse<Object> signupStep(RiderSignupDTO request) {
-        Rider rider = riderRepository.findByPhone(request.phone()).orElse(null);
-        UUID riderId = UUID.fromString(httpRequest.getAttribute("id").toString());
+        Rider rider = request.phone() != null
+                ? riderRepository.findByPhone(request.phone()).orElse(null)
+                : null;
+
         if (rider == null && request.step() == Rider.RiderStep.PHONE) {
             rider = new Rider();
             rider.setPhone(request.phone());
             rider.setStep(Rider.RiderStep.PHONE);
             rider = riderRepository.save(rider);
-        } else {
-            rider = riderRepository.findById(riderId).orElse(null);
+        } else if (rider == null) {
+            if (request.id() != null) {
+                rider = riderRepository.findById(request.id()).orElse(null);
+            }
+            if (rider == null) {
+                return new ApiResponse<>(false, "Rider not found. Complete PHONE step first.", null, 404);
+            }
         }
         switch (request.step()) { // step comes from client
             case PHONE:
@@ -70,14 +77,21 @@ public class RiderService {
                 }
                 return handleVehicle(rider, request);
 
+            case PROFILE_IMAGE:
+                if (rider.getStep() != Rider.RiderStep.VEHICLE) {
+                    return new ApiResponse<>(false, "You must complete VEHICLE step first", null, 400);
+                }
+                return handleProfileImage(rider, request);
+
             case VEHICLE_TYPE:
-                if (rider.getStep() == Rider.RiderStep.VEHICLE) {
+                if (rider.getStep() != Rider.RiderStep.VEHICLE
+                        && rider.getStep() != Rider.RiderStep.PROFILE_IMAGE) {
                     return new ApiResponse<>(false, "You must complete VEHICLE step first", null, 400);
                 }
                 return handleVehicleType(rider, request);
 
             case VEHICLE_IMAGE:
-                if (rider.getStep() == Rider.RiderStep.VEHICLE_TYPE) {
+                if (rider.getStep() != Rider.RiderStep.VEHICLE_TYPE) {
                     return new ApiResponse<>(false, "You must complete VEHICLE_TYPE step first", null, 400);
                 }
                 return handleVehicleImages(rider, request);
@@ -124,12 +138,29 @@ public class RiderService {
         }
 
         vehicle.setVehicleNumber(request.vehicleNumber());
+        rider.setStep(Rider.RiderStep.VEHICLE);
 
         rider.setVehicle(vehicle);
-
         riderRepository.save(rider);
 
-        return new ApiResponse<>(true, "Rider onboarding completed", rider, 200);
+        return new ApiResponse<>(true, "Vehicle number saved", rider, 200);
+    }
+
+    private ApiResponse<Object> handleProfileImage(Rider rider, RiderSignupDTO request) {
+        List<MultipartFile> files = request.files();
+        if (files == null || files.isEmpty()) {
+            return new ApiResponse<>(false, "Profile image is required", null, 400);
+        }
+        try {
+            Map uploadResult = cloudinary.uploader().upload(
+                    files.get(0).getBytes(), ObjectUtils.emptyMap());
+            rider.setProfileImage(uploadResult.get("url").toString());
+        } catch (IOException e) {
+            return new ApiResponse<>(false, "Failed to upload profile image", null, 500);
+        }
+        rider.setStep(Rider.RiderStep.PROFILE_IMAGE);
+        riderRepository.save(rider);
+        return new ApiResponse<>(true, "Profile image uploaded", rider, 200);
     }
 
     public ApiResponse<Object> handleVehicleImages(Rider rider, RiderSignupDTO request) {
@@ -152,6 +183,8 @@ public class RiderService {
 
         vehicle.getImages().addAll(uploadedUrls);
         rider.setVehicle(vehicle);
+        rider.setStep(Rider.RiderStep.COMPLETED);
+        rider.setStatus(Rider.RiderStatus.ACTIVE);
         riderRepository.save(rider);
 
         return new ApiResponse<>(true, "Vehicle images uploaded", rider, 200);
@@ -207,8 +240,7 @@ public class RiderService {
         } catch (IllegalArgumentException e) {
             return new ApiResponse<>(false, "Invalid vehicle type: " + vehicleTypeStr, null, 400);
         }
-        rider.setStep(Rider.RiderStep.COMPLETED); // final step
-        rider.setStatus(Rider.RiderStatus.ACTIVE);
+        rider.setStep(Rider.RiderStep.VEHICLE_TYPE);
 
         rider.setVehicle(vehicle);
         riderRepository.save(rider);
