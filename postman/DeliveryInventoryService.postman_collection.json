@@ -1,0 +1,898 @@
+{
+  "info": {
+    "_postman_id": "fd661d1d-9904-4a36-9fdc-delivery-inventory",
+    "name": "DeliveryInventoryService APIs",
+    "description": "Complete local Postman collection for the Spring Boot DeliveryInventoryService. Import `DeliveryInventoryService.local.postman_environment.json`, select the environment, then replace UUID variables with IDs created in your database. Private API requests include `X-Client-Id` and `X-Client-Password` headers.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Checks whether the service is reachable.\n\n```bash\ncurl '{{baseUrl}}/'\n```",
+            "url": "{{baseUrl}}/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "description": "Order creation, seed helpers, and delivery status.",
+      "item": [
+        {
+          "name": "Create Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"0f858d4a-4b48-4e0d-9d9e-2df8cf66af7c\",\n  \"bookingId\": \"19f63a8a-1a93-49d8-b32c-f5f87d0784f1\",\n  \"riderId\": null,\n  \"distance\": 12.5,\n  \"wareHouseId\": \"{{warehouseId}}\",\n  \"originAddress\": \"Connaught Place, Delhi\",\n  \"originLat\": 28.6315,\n  \"originLng\": 77.2167,\n  \"originCity\": \"Delhi\",\n  \"destAddress\": \"Sector 18, Noida\",\n  \"destLat\": 28.5708,\n  \"destLng\": 77.3261,\n  \"destCity\": \"Noida\",\n  \"weightKg\": 5.0,\n  \"serviceType\": \"STANDARD\",\n  \"status\": \"CREATED\",\n  \"expectedDeliveryDate\": \"2026-05-10T18:00:00+05:30\"\n}"
+            },
+            "description": "Creates a new order.\n\n```bash\ncurl -X POST '{{baseUrl}}/api/v1/orders' -H 'Content-Type: application/json' -d '{\"customerId\":\"0f858d4a-4b48-4e0d-9d9e-2df8cf66af7c\",\"bookingId\":\"19f63a8a-1a93-49d8-b32c-f5f87d0784f1\",\"distance\":12.5,\"wareHouseId\":\"{{warehouseId}}\",\"originAddress\":\"Connaught Place, Delhi\",\"originLat\":28.6315,\"originLng\":77.2167,\"originCity\":\"Delhi\",\"destAddress\":\"Sector 18, Noida\",\"destLat\":28.5708,\"destLng\":77.3261,\"destCity\":\"Noida\",\"weightKg\":5.0,\"serviceType\":\"STANDARD\",\"status\":\"CREATED\"}'\n```",
+            "url": "{{baseUrl}}/api/v1/orders"
+          }
+        },
+        {
+          "name": "Seed Orders From File",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Calls the current seed endpoint, which loads orders from `src/main/resources/seed/orders_seed.json`.\n\n```bash\ncurl '{{baseUrl}}/api/v1/orders'\n```",
+            "url": "{{baseUrl}}/api/v1/orders"
+          }
+        },
+        {
+          "name": "Test Riders By City",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Development helper endpoint returning riders for Delhi.\n\n```bash\ncurl '{{baseUrl}}/api/v1/orders/test'\n```",
+            "url": "{{baseUrl}}/api/v1/orders/test"
+          }
+        },
+        {
+          "name": "Trigger Inter-city ETA Refresh",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Development helper endpoint that triggers inter-city ETA refresh.\n\n```bash\ncurl '{{baseUrl}}/api/v1/orders/test2'\n```",
+            "url": "{{baseUrl}}/api/v1/orders/test2"
+          }
+        },
+        {
+          "name": "Mark Order Delivered",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "description": "Marks an order as delivered and updates last-mile ETA cache.\n\n```bash\ncurl -X PATCH '{{baseUrl}}/api/v1/orders/{{orderId}}/delivered'\n```",
+            "url": "{{baseUrl}}/api/v1/orders/{{orderId}}/delivered"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Riders",
+      "description": "Rider onboarding, lookup, route creation, assignment, and live location.",
+      "item": [
+        {
+          "name": "Signup - PHONE Step",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": null,\n  \"phone\": \"{{phone}}\",\n  \"step\": \"PHONE\"\n}"
+            },
+            "description": "Starts rider signup with a 10-digit phone number.\n\n```bash\ncurl -X POST '{{baseUrl}}/api/v1/riders/signup' -H 'Content-Type: application/json' -d '{\"phone\":\"{{phone}}\",\"step\":\"PHONE\"}'\n```",
+            "url": "{{baseUrl}}/api/v1/riders/signup"
+          }
+        },
+        {
+          "name": "Signup - NAME Step",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{riderId}}\",\n  \"phone\": \"{{phone}}\",\n  \"name\": \"Amit Rider\",\n  \"step\": \"NAME\"\n}"
+            },
+            "description": "Adds rider name during onboarding.",
+            "url": "{{baseUrl}}/api/v1/riders/signup"
+          }
+        },
+        {
+          "name": "Signup - LICENSE Step",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{riderId}}\",\n  \"phone\": \"{{phone}}\",\n  \"licenseNumber\": \"DL-12345\",\n  \"step\": \"LICENSE\"\n}"
+            },
+            "description": "Adds rider license number during onboarding.",
+            "url": "{{baseUrl}}/api/v1/riders/signup"
+          }
+        },
+        {
+          "name": "Signup - VEHICLE Step",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{riderId}}\",\n  \"phone\": \"{{phone}}\",\n  \"vehicleNumber\": \"DL01AB1234\",\n  \"vehicleTypeStr\": \"MOTORCYCLE\",\n  \"step\": \"VEHICLE\"\n}"
+            },
+            "description": "Adds vehicle details during onboarding.",
+            "url": "{{baseUrl}}/api/v1/riders/signup"
+          }
+        },
+        {
+          "name": "Get Rider By Phone",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Fetches a rider by phone number.\n\n```bash\ncurl '{{baseUrl}}/api/v1/riders/{{phone}}'\n```",
+            "url": "{{baseUrl}}/api/v1/riders/{{phone}}"
+          }
+        },
+        {
+          "name": "Mark Rider Inactive",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "description": "Marks a rider inactive by phone.\n\n```bash\ncurl -X PUT '{{baseUrl}}/api/v1/riders/{{phone}}/inactive'\n```",
+            "url": "{{baseUrl}}/api/v1/riders/{{phone}}/inactive"
+          }
+        },
+        {
+          "name": "Blacklist Rider",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "description": "Blacklists a rider by phone.\n\n```bash\ncurl -X PUT '{{baseUrl}}/api/v1/riders/{{phone}}/blacklist'\n```",
+            "url": "{{baseUrl}}/api/v1/riders/{{phone}}/blacklist"
+          }
+        },
+        {
+          "name": "Create Vehicle Route",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Client-Id",
+                "value": "{{clientId}}"
+              },
+              {
+                "key": "X-Client-Password",
+                "value": "{{clientPassword}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startLocation\": \"Delhi Warehouse\",\n  \"destinationLocation\": \"Noida Hub\",\n  \"startTime\": \"2026-05-10T09:00:00\",\n  \"endTime\": \"2026-05-10T11:00:00\",\n  \"direction\": \"OUTBOUND\",\n  \"points\": [\n    {\n      \"locationName\": \"Delhi Warehouse\",\n      \"latitude\": 28.6315,\n      \"longitude\": 77.2167\n    },\n    {\n      \"locationName\": \"Noida Hub\",\n      \"latitude\": 28.5708,\n      \"longitude\": 77.3261\n    }\n  ]\n}"
+            },
+            "description": "Private API. Creates a route for a vehicle.\n\n```bash\ncurl -X POST '{{baseUrl}}/api/v1/riders/vehicle/{{vehicleId}}/routes' -H 'Content-Type: application/json' -H 'X-Client-Id: {{clientId}}' -H 'X-Client-Password: {{clientPassword}}' -d '{\"startLocation\":\"Delhi Warehouse\",\"destinationLocation\":\"Noida Hub\",\"startTime\":\"2026-05-10T09:00:00\",\"endTime\":\"2026-05-10T11:00:00\",\"direction\":\"OUTBOUND\",\"points\":[{\"locationName\":\"Delhi Warehouse\",\"latitude\":28.6315,\"longitude\":77.2167},{\"locationName\":\"Noida Hub\",\"latitude\":28.5708,\"longitude\":77.3261}]}'\n```",
+            "url": "{{baseUrl}}/api/v1/riders/vehicle/{{vehicleId}}/routes"
+          }
+        },
+        {
+          "name": "Find Time For Products",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Client-Id",
+                "value": "{{clientId}}"
+              },
+              {
+                "key": "X-Client-Password",
+                "value": "{{clientPassword}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  \"55555555-5555-5555-5555-555555555555\",\n  \"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\"\n]"
+            },
+            "description": "Private API. Finds delivery time info for product/order UUIDs.\n\n```bash\ncurl -X PUT '{{baseUrl}}/api/v1/riders/find-time' -H 'Content-Type: application/json' -H 'X-Client-Id: {{clientId}}' -H 'X-Client-Password: {{clientPassword}}' -d '[\"55555555-5555-5555-5555-555555555555\"]'\n```",
+            "url": "{{baseUrl}}/api/v1/riders/find-time"
+          }
+        },
+        {
+          "name": "Get Rider Route Today",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Returns today's ordered stop list for a rider.\n\n```bash\ncurl '{{baseUrl}}/api/v1/riders/{{riderId}}/route/today'\n```",
+            "url": "{{baseUrl}}/api/v1/riders/{{riderId}}/route/today"
+          }
+        },
+        {
+          "name": "Update Assignment Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"DELIVERED\",\n  \"failureReason\": null\n}"
+            },
+            "description": "Updates a rider route assignment status. Valid statuses: `DELIVERED`, `FAILED`.\n\n```bash\ncurl -X PATCH '{{baseUrl}}/api/v1/riders/{{riderId}}/assignments/{{assignmentId}}/status' -H 'Content-Type: application/json' -d '{\"status\":\"DELIVERED\",\"failureReason\":null}'\n```",
+            "url": "{{baseUrl}}/api/v1/riders/{{riderId}}/assignments/{{assignmentId}}/status"
+          }
+        },
+        {
+          "name": "Update Rider Location",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lat\": 28.6139,\n  \"lng\": 77.2090,\n  \"heading\": 90.0,\n  \"speedKmh\": 32.5,\n  \"warehouseId\": \"{{warehouseId}}\"\n}"
+            },
+            "description": "Stores the rider's live GPS location in Redis.\n\n```bash\ncurl -X POST '{{baseUrl}}/api/v1/riders/{{riderId}}/location' -H 'Content-Type: application/json' -d '{\"lat\":28.6139,\"lng\":77.2090,\"heading\":90.0,\"speedKmh\":32.5,\"warehouseId\":\"{{warehouseId}}\"}'\n```",
+            "url": "{{baseUrl}}/api/v1/riders/{{riderId}}/location"
+          }
+        },
+        {
+          "name": "Get Live Riders For Warehouse",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Returns current Redis-backed GPS locations for riders active in a warehouse.\n\n```bash\ncurl '{{baseUrl}}/api/v1/riders/admin/warehouse/{{warehouseId}}/riders/live'\n```",
+            "url": "{{baseUrl}}/api/v1/riders/admin/warehouse/{{warehouseId}}/riders/live"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Warehouses",
+      "item": [
+        {
+          "name": "Create Warehouse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Delhi Last Mile Depot\",\n  \"city\": \"Delhi\",\n  \"state\": \"Delhi\",\n  \"address\": \"Connaught Place, Delhi\",\n  \"lat\": 28.6315,\n  \"lng\": 77.2167,\n  \"capacityMaxParcels\": 500,\n  \"capacityMaxKg\": 2500.0,\n  \"type\": \"LAST_MILE_DEPOT\"\n}"
+            },
+            "description": "Creates a warehouse. Type values: `STAGING`, `REGIONAL`, `LAST_MILE_DEPOT`.\n\n```bash\ncurl -X POST '{{baseUrl}}/api/v1/warehouses' -H 'Content-Type: application/json' -d '{\"name\":\"Delhi Last Mile Depot\",\"city\":\"Delhi\",\"state\":\"Delhi\",\"address\":\"Connaught Place, Delhi\",\"lat\":28.6315,\"lng\":77.2167,\"capacityMaxParcels\":500,\"capacityMaxKg\":2500.0,\"type\":\"LAST_MILE_DEPOT\"}'\n```",
+            "url": "{{baseUrl}}/api/v1/warehouses"
+          }
+        },
+        {
+          "name": "Get All Warehouses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Lists warehouses.\n\n```bash\ncurl '{{baseUrl}}/api/v1/warehouses'\n```",
+            "url": "{{baseUrl}}/api/v1/warehouses"
+          }
+        },
+        {
+          "name": "Get Warehouse By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Fetches a warehouse by UUID.\n\n```bash\ncurl '{{baseUrl}}/api/v1/warehouses/{{warehouseId}}'\n```",
+            "url": "{{baseUrl}}/api/v1/warehouses/{{warehouseId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Warehouse Parcels",
+      "item": [
+        {
+          "name": "Create Parcel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"weightKg\": 5.0,\n  \"dimensions\": \"30x20x15 cm\",\n  \"description\": \"Electronics package\",\n  \"originWarehouseId\": \"{{warehouseId}}\",\n  \"destinationWarehouseId\": \"{{destinationWarehouseId}}\"\n}"
+            },
+            "description": "Creates a parcel from an order.\n\n```bash\ncurl -X POST '{{baseUrl}}/api/v1/admin/warehouse/parcels' -H 'Content-Type: application/json' -d '{\"orderId\":\"{{orderId}}\",\"weightKg\":5.0,\"dimensions\":\"30x20x15 cm\",\"description\":\"Electronics package\",\"originWarehouseId\":\"{{warehouseId}}\",\"destinationWarehouseId\":\"{{destinationWarehouseId}}\"}'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/parcels"
+          }
+        },
+        {
+          "name": "Get Parcel By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Fetches parcel details.\n\n```bash\ncurl '{{baseUrl}}/api/v1/admin/warehouse/parcels/{{parcelId}}'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/parcels/{{parcelId}}"
+          }
+        },
+        {
+          "name": "Get Parcel By Order Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Fetches parcel details for an order.\n\n```bash\ncurl '{{baseUrl}}/api/v1/admin/warehouse/parcels/order/{{orderId}}'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/parcels/order/{{orderId}}"
+          }
+        },
+        {
+          "name": "List Warehouse Parcels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Lists parcels for a warehouse. Optional status values include `CREATED`, `AWAITING_PICKUP`, `AT_WAREHOUSE`, `IN_SHIPMENT`, `OUT_FOR_DELIVERY`, `DELIVERED`.\n\n```bash\ncurl '{{baseUrl}}/api/v1/admin/warehouse/{{warehouseId}}/parcels?status=CREATED'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/{{warehouseId}}/parcels?status=CREATED"
+          }
+        },
+        {
+          "name": "List Rider Parcels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Lists parcels assigned to a rider. Role can be `pickup` or `delivery`.\n\n```bash\ncurl '{{baseUrl}}/api/v1/admin/warehouse/riders/{{riderId}}/parcels?role=pickup'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/riders/{{riderId}}/parcels?role=pickup"
+          }
+        },
+        {
+          "name": "Assign Pickup Rider",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parcelId\": \"{{parcelId}}\",\n  \"riderId\": \"{{riderId}}\"\n}"
+            },
+            "description": "Assigns a pickup rider and sends seller OTP.\n\n```bash\ncurl -X POST '{{baseUrl}}/api/v1/admin/warehouse/parcels/assign-pickup-rider' -H 'Content-Type: application/json' -d '{\"parcelId\":\"{{parcelId}}\",\"riderId\":\"{{riderId}}\"}'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/parcels/assign-pickup-rider"
+          }
+        },
+        {
+          "name": "Verify Seller OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parcelId\": \"{{parcelId}}\",\n  \"otp\": \"123456\",\n  \"performedBy\": \"{{riderId}}\"\n}"
+            },
+            "description": "Rider verifies the seller OTP while collecting parcel.",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/parcels/verify-seller-otp"
+          }
+        },
+        {
+          "name": "Initiate Warehouse In OTP",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "description": "Initiates warehouse-in handover OTP.\n\n```bash\ncurl -X POST '{{baseUrl}}/api/v1/admin/warehouse/parcels/{{parcelId}}/initiate-warehouse-in'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/parcels/{{parcelId}}/initiate-warehouse-in"
+          }
+        },
+        {
+          "name": "Verify Warehouse In OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parcelId\": \"{{parcelId}}\",\n  \"otp\": \"123456\",\n  \"performedBy\": \"admin-user\"\n}"
+            },
+            "description": "Admin verifies rider handover OTP; parcel becomes `AT_WAREHOUSE`.",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/parcels/verify-warehouse-in"
+          }
+        },
+        {
+          "name": "Assign Delivery Rider",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parcelId\": \"{{parcelId}}\",\n  \"riderId\": \"{{riderId}}\"\n}"
+            },
+            "description": "Assigns delivery rider and sends warehouse-out/customer OTPs.",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/parcels/assign-delivery-rider"
+          }
+        },
+        {
+          "name": "Verify Warehouse Out OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parcelId\": \"{{parcelId}}\",\n  \"otp\": \"123456\",\n  \"performedBy\": \"admin-user\"\n}"
+            },
+            "description": "Verifies warehouse-out OTP; parcel becomes `OUT_FOR_DELIVERY`.",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/parcels/verify-warehouse-out"
+          }
+        },
+        {
+          "name": "Verify Customer OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parcelId\": \"{{parcelId}}\",\n  \"otp\": \"123456\",\n  \"performedBy\": \"customer-user\"\n}"
+            },
+            "description": "Rider verifies customer OTP; parcel becomes `DELIVERED`.",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/parcels/verify-customer-otp"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Warehouse Shipments",
+      "item": [
+        {
+          "name": "Create Shipment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shipmentType\": \"LONG_HAUL\",\n  \"originWarehouseId\": \"{{warehouseId}}\",\n  \"destinationWarehouseId\": \"{{destinationWarehouseId}}\",\n  \"parcelIds\": [\n    \"{{parcelId}}\"\n  ],\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"departureTimeEst\": \"2026-05-10T10:00:00+05:30\",\n  \"arrivalTimeEst\": \"2026-05-10T14:00:00+05:30\"\n}"
+            },
+            "description": "Creates a shipment. Shipment type examples: `LONG_HAUL`, `INTER_HUB`, `LAST_MILE`.\n\n```bash\ncurl -X POST '{{baseUrl}}/api/v1/admin/warehouse/shipments' -H 'Content-Type: application/json' -d '{\"shipmentType\":\"LONG_HAUL\",\"originWarehouseId\":\"{{warehouseId}}\",\"destinationWarehouseId\":\"{{destinationWarehouseId}}\",\"parcelIds\":[\"{{parcelId}}\"],\"vehicleId\":\"{{vehicleId}}\",\"departureTimeEst\":\"2026-05-10T10:00:00+05:30\",\"arrivalTimeEst\":\"2026-05-10T14:00:00+05:30\"}'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/shipments"
+          }
+        },
+        {
+          "name": "Add Parcels To Shipment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parcelIds\": [\n    \"{{parcelId}}\"\n  ]\n}"
+            },
+            "description": "Adds parcels to an existing shipment.",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/shipments/{{shipmentId}}/parcels"
+          }
+        },
+        {
+          "name": "Auto Assign Shipment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"createIfMissing\": true\n}"
+            },
+            "description": "Finds or creates a parcel for an order and places it into the best open shipment.",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/shipments/auto-assign"
+          }
+        },
+        {
+          "name": "Update Shipment Status",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "description": "Updates shipment status. Examples: `CREATED`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `ARRIVED`, `DELIVERED`, `CANCELLED`.\n\n```bash\ncurl -X PATCH '{{baseUrl}}/api/v1/admin/warehouse/shipments/{{shipmentId}}/status?status=IN_TRANSIT'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/shipments/{{shipmentId}}/status?status=IN_TRANSIT"
+          }
+        },
+        {
+          "name": "List Warehouse Shipments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Lists shipments for a warehouse, optionally filtered by status.\n\n```bash\ncurl '{{baseUrl}}/api/v1/admin/warehouse/{{warehouseId}}/shipments?status=CREATED'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/{{warehouseId}}/shipments?status=CREATED"
+          }
+        },
+        {
+          "name": "Get Shipment By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Fetches shipment details.\n\n```bash\ncurl '{{baseUrl}}/api/v1/admin/warehouse/shipments/{{shipmentId}}'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/shipments/{{shipmentId}}"
+          }
+        },
+        {
+          "name": "Get Warehouse Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Returns warehouse dashboard stats.\n\n```bash\ncurl '{{baseUrl}}/api/v1/admin/warehouse/{{warehouseId}}/dashboard'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/warehouse/{{warehouseId}}/dashboard"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Service Zones",
+      "item": [
+        {
+          "name": "Create Circle Zone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Delhi Central User Zone\",\n  \"city\": \"Delhi\",\n  \"description\": \"Central Delhi user service zone\",\n  \"shapeType\": \"CIRCLE\",\n  \"target\": \"USER\",\n  \"centerLat\": 28.6315,\n  \"centerLng\": 77.2167,\n  \"radiusMeters\": 5000,\n  \"polygonPoints\": null\n}"
+            },
+            "description": "Creates a service zone. Shape types: `CIRCLE`, `POLYGON`; targets: `USER`, `SELLER`, `BOTH`.\n\n```bash\ncurl -X POST '{{baseUrl}}/api/v1/admin/service-zones' -H 'Content-Type: application/json' -d '{\"name\":\"Delhi Central User Zone\",\"city\":\"Delhi\",\"shapeType\":\"CIRCLE\",\"target\":\"USER\",\"centerLat\":28.6315,\"centerLng\":77.2167,\"radiusMeters\":5000}'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/service-zones"
+          }
+        },
+        {
+          "name": "Create Polygon Zone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Noida Seller Polygon\",\n  \"city\": \"Noida\",\n  \"description\": \"Polygon seller pickup area\",\n  \"shapeType\": \"POLYGON\",\n  \"target\": \"SELLER\",\n  \"polygonPoints\": [\n    { \"lat\": 28.5700, \"lng\": 77.3100 },\n    { \"lat\": 28.5900, \"lng\": 77.3100 },\n    { \"lat\": 28.5900, \"lng\": 77.3400 },\n    { \"lat\": 28.5700, \"lng\": 77.3400 }\n  ]\n}"
+            },
+            "description": "Creates a polygon service zone with at least 3 points.",
+            "url": "{{baseUrl}}/api/v1/admin/service-zones"
+          }
+        },
+        {
+          "name": "Get All Service Zones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Lists all service zones.\n\n```bash\ncurl '{{baseUrl}}/api/v1/admin/service-zones'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/service-zones"
+          }
+        },
+        {
+          "name": "Get Service Zone By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Fetches service zone by UUID.\n\n```bash\ncurl '{{baseUrl}}/api/v1/admin/service-zones/{{serviceZoneId}}'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/service-zones/{{serviceZoneId}}"
+          }
+        },
+        {
+          "name": "Update Service Zone",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Delhi Central User Zone Updated\",\n  \"city\": \"Delhi\",\n  \"description\": \"Updated central Delhi user service zone\",\n  \"shapeType\": \"CIRCLE\",\n  \"target\": \"BOTH\",\n  \"centerLat\": 28.6315,\n  \"centerLng\": 77.2167,\n  \"radiusMeters\": 7000\n}"
+            },
+            "description": "Updates a service zone.",
+            "url": "{{baseUrl}}/api/v1/admin/service-zones/{{serviceZoneId}}"
+          }
+        },
+        {
+          "name": "Toggle Service Zone Status",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "description": "Toggles service zone status between `ACTIVE` and `INACTIVE`.\n\n```bash\ncurl -X PATCH '{{baseUrl}}/api/v1/admin/service-zones/{{serviceZoneId}}/status'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/service-zones/{{serviceZoneId}}/status"
+          }
+        },
+        {
+          "name": "Delete Service Zone",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "description": "Deletes a service zone.\n\n```bash\ncurl -X DELETE '{{baseUrl}}/api/v1/admin/service-zones/{{serviceZoneId}}'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/service-zones/{{serviceZoneId}}"
+          }
+        },
+        {
+          "name": "Rebuild Service Zone Cache",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "description": "Forces Redis service-zone cache rebuild.\n\n```bash\ncurl -X POST '{{baseUrl}}/api/v1/admin/service-zones/cache/rebuild'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/service-zones/cache/rebuild"
+          }
+        },
+        {
+          "name": "Check Zone Eligibility",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Checks whether a lat/lng is in a serviceable zone. Type values: `USER`, `SELLER`, `BOTH`.\n\n```bash\ncurl '{{baseUrl}}/api/v1/zones/check?lat=28.6315&lng=77.2167&type=USER'\n```",
+            "url": "{{baseUrl}}/api/v1/zones/check?lat=28.6315&lng=77.2167&type=USER"
+          }
+        },
+        {
+          "name": "Get Active Zones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Returns active zone boundaries for a target type.\n\n```bash\ncurl '{{baseUrl}}/api/v1/zones/active?type=USER'\n```",
+            "url": "{{baseUrl}}/api/v1/zones/active?type=USER"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Serviceable Areas",
+      "item": [
+        {
+          "name": "Create Serviceable Area",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pincode\": \"110001\",\n  \"city\": \"Delhi\"\n}"
+            },
+            "description": "Creates a serviceable pincode/city record.\n\n```bash\ncurl -X POST '{{baseUrl}}/api/v1/serviceable-areas' -H 'Content-Type: application/json' -d '{\"pincode\":\"110001\",\"city\":\"Delhi\"}'\n```",
+            "url": "{{baseUrl}}/api/v1/serviceable-areas"
+          }
+        },
+        {
+          "name": "Get All Serviceable Areas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Lists all serviceable pincode records.\n\n```bash\ncurl '{{baseUrl}}/api/v1/serviceable-areas'\n```",
+            "url": "{{baseUrl}}/api/v1/serviceable-areas"
+          }
+        },
+        {
+          "name": "Get Serviceable Area By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Fetches a serviceable pincode record by UUID.\n\n```bash\ncurl '{{baseUrl}}/api/v1/serviceable-areas/{{serviceableAreaId}}'\n```",
+            "url": "{{baseUrl}}/api/v1/serviceable-areas/{{serviceableAreaId}}"
+          }
+        },
+        {
+          "name": "Update Serviceable Area",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pincode\": \"110002\",\n  \"city\": \"Delhi\"\n}"
+            },
+            "description": "Updates a serviceable pincode record.",
+            "url": "{{baseUrl}}/api/v1/serviceable-areas/{{serviceableAreaId}}"
+          }
+        },
+        {
+          "name": "Delete Serviceable Area",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "description": "Deletes a serviceable pincode record.\n\n```bash\ncurl -X DELETE '{{baseUrl}}/api/v1/serviceable-areas/{{serviceableAreaId}}'\n```",
+            "url": "{{baseUrl}}/api/v1/serviceable-areas/{{serviceableAreaId}}"
+          }
+        },
+        {
+          "name": "Check Pincode Service Availability",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Checks service availability by pincode plus lat/lng.\n\n```bash\ncurl '{{baseUrl}}/api/v1/service/check?pincode=110001&lat=28.6315&lng=77.2167'\n```",
+            "url": "{{baseUrl}}/api/v1/service/check?pincode=110001&lat=28.6315&lng=77.2167"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Delivery Estimate",
+      "item": [
+        {
+          "name": "Get Delivery Estimate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Returns a 3-segment ETA for shop to user delivery.\n\n```bash\ncurl '{{baseUrl}}/api/v1/delivery/estimate?shopLat=28.6315&shopLng=77.2167&userLat=28.5708&userLng=77.3261'\n```",
+            "url": "{{baseUrl}}/api/v1/delivery/estimate?shopLat=28.6315&shopLng=77.2167&userLat=28.5708&userLng=77.3261"
+          }
+        }
+      ]
+    },
+    {
+      "name": "VRP",
+      "item": [
+        {
+          "name": "Trigger VRP Batch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cities\": [\n    \"Delhi\",\n    \"Noida\"\n  ],\n  \"dryRun\": false\n}"
+            },
+            "description": "Manually queues VRP for provided cities. Send `{}` or empty body to use all cities with `CREATED` orders.\n\n```bash\ncurl -X POST '{{baseUrl}}/api/v1/admin/vrp/trigger' -H 'Content-Type: application/json' -d '{\"cities\":[\"Delhi\",\"Noida\"],\"dryRun\":false}'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/vrp/trigger"
+          }
+        },
+        {
+          "name": "Get VRP Run Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Returns one VRP batch run by UUID.\n\n```bash\ncurl '{{baseUrl}}/api/v1/admin/vrp/runs/{{batchRunId}}'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/vrp/runs/{{batchRunId}}"
+          }
+        },
+        {
+          "name": "Get Running VRP Runs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Returns currently running VRP batch runs.\n\n```bash\ncurl '{{baseUrl}}/api/v1/admin/vrp/runs'\n```",
+            "url": "{{baseUrl}}/api/v1/admin/vrp/runs"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tracking",
+      "item": [
+        {
+          "name": "Update Vehicle Location",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"routeId\": \"{{routeId}}\",\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"currentFromSequence\": 2,\n  \"lat\": 28.6139,\n  \"lon\": 77.2090\n}"
+            },
+            "description": "Publishes a vehicle GPS ping to Kafka.\n\n```bash\ncurl -X POST '{{baseUrl}}/api/v1/tracking/location' -H 'Content-Type: application/json' -d '{\"routeId\":\"{{routeId}}\",\"vehicleId\":\"{{vehicleId}}\",\"currentFromSequence\":2,\"lat\":28.6139,\"lon\":77.2090}'\n```",
+            "url": "{{baseUrl}}/api/v1/tracking/location"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8083"
+    },
+    {
+      "key": "clientId",
+      "value": "product-client-service"
+    },
+    {
+      "key": "clientPassword",
+      "value": "secret123"
+    }
+  ]
+}
