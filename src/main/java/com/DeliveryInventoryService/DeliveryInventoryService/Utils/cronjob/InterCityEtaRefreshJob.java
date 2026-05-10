@@ -37,7 +37,7 @@ public class InterCityEtaRefreshJob {
      * Cron: every 30 minutes.
      * Override via: myapp.cron.inter_city_eta_refresh in application.properties
      */
-    @Scheduled(cron = "${myapp.cron.inter_city_eta_refresh:0 */5 * * * *}")
+    @Scheduled(cron = "${myapp.cron.inter_city_eta_refresh:0 */20 * * * *}")
     public void refreshAllCityPairs() {
         log.info("═══════════════════════════════════════════════════════");
         log.info("  InterCity ETA Refresh Job — START");
@@ -91,3 +91,4 @@ public class InterCityEtaRefreshJob {
         log.info("═══════════════════════════════════════════════════════");
     }
 }
+// hukku
