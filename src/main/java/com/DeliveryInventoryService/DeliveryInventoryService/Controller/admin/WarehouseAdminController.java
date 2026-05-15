@@ -71,6 +71,17 @@ public class WarehouseAdminController {
         return respond(parcelService.getParcel(parcelId));
     }
 
+    @PatchMapping("/parcels/{parcelId}")
+    public ResponseEntity<?> updateParcel(@PathVariable UUID parcelId,
+                                          @RequestBody UpdateParcelRequest req) {
+        return respond(parcelService.updateParcel(parcelId, req));
+    }
+
+    @DeleteMapping("/parcels/{parcelId}")
+    public ResponseEntity<?> deleteParcel(@PathVariable UUID parcelId) {
+        return respond(parcelService.deleteParcel(parcelId));
+    }
+
     @GetMapping("/parcels/order/{orderId}")
     public ResponseEntity<?> getParcelByOrder(@PathVariable UUID orderId) {
         return respond(parcelService.getParcelByOrder(orderId));
@@ -199,6 +210,17 @@ public class WarehouseAdminController {
                 .<ResponseEntity<?>>map(s -> ResponseEntity.ok(new ApiResponse<>(true, "OK", s, 200)))
                 .orElse(ResponseEntity.status(404)
                         .body(new ApiResponse<>(false, "Shipment not found", null, 404)));
+    }
+
+    @PatchMapping("/shipments/{shipmentId}")
+    public ResponseEntity<?> updateShipment(@PathVariable UUID shipmentId,
+                                            @RequestBody UpdateShipmentRequest req) {
+        return respond(shipmentService.updateShipment(shipmentId, req));
+    }
+
+    @DeleteMapping("/shipments/{shipmentId}")
+    public ResponseEntity<?> deleteShipment(@PathVariable UUID shipmentId) {
+        return respond(shipmentService.deleteShipment(shipmentId));
     }
 
     // ═══════════════════════════════════════════════════════════════

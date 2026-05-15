@@ -7,12 +7,16 @@ import com.DeliveryInventoryService.DeliveryInventoryService.Model.Parcel.Parcel
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Shipment.ShipmentStatus;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.*;
 import com.DeliveryInventoryService.DeliveryInventoryService.Utils.GeoUtils;
+import com.DeliveryInventoryService.DeliveryInventoryService.kafka.ParcelLifecycleEvent;
+import com.DeliveryInventoryService.DeliveryInventoryService.kafka.ParcelLifecycleProducer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -40,6 +44,7 @@ public class ShipmentService {
     private final WarehouseRepository warehouseRepository;
     private final ParcelService parcelService;
     private final RiderRepository riderRepository;
+    private final ParcelLifecycleProducer lifecycleProducer;
     private final RedisTemplate<String, Object> etaRedisTemplate;
 
     // ── Cache keys ────────────────────────────────────────────────────────
@@ -206,7 +211,6 @@ public class ShipmentService {
             return new ApiResponse<>(false, "Invalid status: " + newStatus, null, 400);
         }
 
-        // State machine guard
         if (!isValidTransition(shipment.getStatus(), next)) {
             return new ApiResponse<>(false,
                     "Invalid transition: " + shipment.getStatus() + " → " + next, null, 400);
@@ -216,27 +220,64 @@ public class ShipmentService {
         shipmentRepository.save(shipment);
         cacheShipmentStatus(shipment);
 
-        // Cascade to parcels when shipment goes IN_TRANSIT or ARRIVED
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
+
         if (next == ShipmentStatus.IN_TRANSIT) {
             parcelRepository.findByShipmentId(shipmentId).forEach(p -> {
                 p.setStatus(ParcelStatus.IN_TRANSIT);
-                p.setDispatchedAt(java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata")));
+                p.setDispatchedAt(now);
                 parcelRepository.save(p);
-                etaRedisTemplate.opsForValue().set("parcel:status:" + p.getId(), p.getStatus().name());
+                etaRedisTemplate.opsForValue().set("parcel:status:" + p.getId(), ParcelStatus.IN_TRANSIT.name());
+                publishEvent(p, ParcelLifecycleEvent.EventType.SHIPMENT_DEPARTED,
+                        ParcelStatus.IN_TRANSIT, shipment, null);
             });
         }
 
         if (next == ShipmentStatus.ARRIVED) {
+            UUID shipmentDestId = shipment.getDestinationWarehouseId();
             parcelRepository.findByShipmentId(shipmentId).forEach(p -> {
-                p.setStatus(ParcelStatus.AT_DEST_WAREHOUSE);
-                // Update current warehouse to destination
-                p.setCurrentWarehouseId(shipment.getDestinationWarehouseId());
+                p.setCurrentWarehouseId(shipmentDestId);
+                p.setArrivedAtWarehouseAt(now);
+
+                boolean atFinalDest = shipmentDestId.equals(p.getDestinationWarehouseId());
+                if (atFinalDest) {
+                    // Last leg: ready for last-mile dispatch
+                    p.setStatus(ParcelStatus.AT_DEST_WAREHOUSE);
+                } else {
+                    // Intermediate hub: clear shipment link so cron/planner can re-bag
+                    // for the next leg. Setting status back to AT_WAREHOUSE makes it
+                    // visible to findUnshippedParcels at the hub warehouse.
+                    p.setStatus(ParcelStatus.AT_WAREHOUSE);
+                    p.setShipment(null);
+                }
+
                 parcelRepository.save(p);
                 etaRedisTemplate.opsForValue().set("parcel:status:" + p.getId(), p.getStatus().name());
+                publishEvent(p, ParcelLifecycleEvent.EventType.SHIPMENT_ARRIVED,
+                        p.getStatus(), shipment, atFinalDest ? null : "Intermediate hub — re-queued for next leg");
             });
         }
 
         return new ApiResponse<>(true, "Shipment status updated to " + next, toResponse(shipment), 200);
+    }
+
+    private void publishEvent(Parcel p, ParcelLifecycleEvent.EventType type,
+                              ParcelStatus newStatus, Shipment shipment, String notes) {
+        try {
+            lifecycleProducer.publish(ParcelLifecycleEvent.builder()
+                    .parcelId(p.getId())
+                    .orderId(p.getOrderId())
+                    .eventType(type)
+                    .newStatus(newStatus)
+                    .warehouseId(shipment.getDestinationWarehouseId())
+                    .shipmentId(shipment.getId())
+                    .shipmentNo(shipment.getShipmentNo())
+                    .occurredAt(ZonedDateTime.now(ZoneId.of("Asia/Kolkata")))
+                    .notes(notes)
+                    .build());
+        } catch (Exception e) {
+            log.warn("Failed to publish lifecycle event {} for parcel {}: {}", type, p.getId(), e.getMessage());
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -331,34 +372,111 @@ public class ShipmentService {
                 SHIPMENT_CACHE_PREFIX + shipment.getId(), shipment.getStatus().name());
     }
 
+    /**
+     * Returns all shipments where this warehouse is origin OR destination,
+     * deduplicated and sorted newest-first. Includes arriving shipments so
+     * the warehouse UI can track inbound deliveries for next-hop re-planning.
+     */
+    @Transactional(readOnly = true)
     public List<ShipmentResponse> getWarehouseShipments(UUID warehouseId, String status) {
-        List<Shipment> shipments = status != null
-                ? shipmentRepository.findByOriginWarehouseIdAndStatus(
-                        warehouseId, ShipmentStatus.valueOf(status.toUpperCase()))
-                : shipmentRepository.findByOriginWarehouseId(warehouseId);
-        return shipments.stream().map(this::toResponse).toList();
+        LinkedHashSet<Shipment> merged = new LinkedHashSet<>();
+        if (status != null) {
+            ShipmentStatus st = ShipmentStatus.valueOf(status.toUpperCase());
+            merged.addAll(shipmentRepository.findByOriginWarehouseIdAndStatus(warehouseId, st));
+            merged.addAll(shipmentRepository.findByDestinationWarehouseIdAndStatus(warehouseId, st));
+        } else {
+            merged.addAll(shipmentRepository.findByOriginWarehouseId(warehouseId));
+            merged.addAll(shipmentRepository.findByDestinationWarehouseId(warehouseId));
+        }
+        return merged.stream()
+                .sorted(Comparator.comparing(Shipment::getCreatedAt).reversed())
+                .map(this::toResponse)
+                .toList();
     }
 
+    @Transactional(readOnly = true)
     public Optional<ShipmentResponse> findShipmentById(UUID shipmentId) {
         return shipmentRepository.findById(shipmentId).map(this::toResponse);
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // UPDATE / DELETE
+    // ─────────────────────────────────────────────────────────────────────
+
+    @Transactional
+    public ApiResponse<Object> updateShipment(UUID shipmentId, UpdateShipmentRequest req) {
+        Shipment shipment = shipmentRepository.findById(shipmentId).orElse(null);
+        if (shipment == null) return new ApiResponse<>(false, "Shipment not found", null, 404);
+
+        if (shipment.getStatus() != ShipmentStatus.CREATED
+                && shipment.getStatus() != ShipmentStatus.ASSIGNED) {
+            return new ApiResponse<>(false,
+                    "Cannot edit shipment in " + shipment.getStatus() + " state", null, 409);
+        }
+
+        if (req.getVehicleId() != null) shipment.setVehicleId(req.getVehicleId());
+        if (req.getShipmentType() != null) shipment.setShipmentType(req.getShipmentType());
+        if (req.getCostEstimate() != null) shipment.setCostEstimate(req.getCostEstimate());
+        if (req.getDepartureTimeEst() != null && !req.getDepartureTimeEst().isBlank()) {
+            shipment.setDepartureTimeEst(java.time.ZonedDateTime.parse(req.getDepartureTimeEst()));
+        }
+        if (req.getArrivalTimeEst() != null && !req.getArrivalTimeEst().isBlank()) {
+            shipment.setArrivalTimeEst(java.time.ZonedDateTime.parse(req.getArrivalTimeEst()));
+        }
+
+        shipmentRepository.save(shipment);
+        return new ApiResponse<>(true, "Shipment updated", toResponse(shipment), 200);
+    }
+
+    /**
+     * Delete a shipment that hasn't moved. Detaches any parcels back to
+     * AT_WAREHOUSE so they can be re-bagged into a new shipment.
+     */
+    @Transactional
+    public ApiResponse<Object> deleteShipment(UUID shipmentId) {
+        Shipment shipment = shipmentRepository.findById(shipmentId).orElse(null);
+        if (shipment == null) return new ApiResponse<>(false, "Shipment not found", null, 404);
+
+        if (shipment.getStatus() != ShipmentStatus.CREATED
+                && shipment.getStatus() != ShipmentStatus.CANCELLED) {
+            return new ApiResponse<>(false,
+                    "Cannot delete shipment in " + shipment.getStatus() + " — cancel it first",
+                    null, 409);
+        }
+
+        parcelRepository.findByShipmentId(shipmentId).forEach(p -> {
+            p.setShipment(null);
+            p.setStatus(ParcelStatus.AT_WAREHOUSE);
+            parcelRepository.save(p);
+            etaRedisTemplate.opsForValue().set("parcel:status:" + p.getId(), p.getStatus().name());
+        });
+
+        shipmentRepository.delete(shipment);
+        etaRedisTemplate.delete(SHIPMENT_CACHE_PREFIX + shipmentId);
+        log.info("Shipment {} deleted; parcels released back to AT_WAREHOUSE", shipmentId);
+        return new ApiResponse<>(true, "Shipment deleted", null, 200);
+    }
+
     public ShipmentResponse toResponse(Shipment s) {
-        double totalWt = s.getParcels().stream().mapToDouble(Parcel::getWeightKg).sum();
+        List<Parcel> parcelList = s.getParcels();
+        double totalWt = parcelList.stream().mapToDouble(Parcel::getWeightKg).sum();
         return ShipmentResponse.builder()
                 .id(s.getId())
                 .shipmentNo(s.getShipmentNo())
                 .shipmentType(s.getShipmentType())
+                .vehicleId(s.getVehicleId())
                 .originWarehouseId(s.getOriginWarehouseId())
                 .destinationWarehouseId(s.getDestinationWarehouseId())
                 .originCity(s.getOriginCity())
                 .destinationCity(s.getDestinationCity())
-                .parcelCount(s.getParcels().size())
+                .parcelCount(parcelList.size())
                 .totalWeightKg(totalWt)
                 .status(s.getStatus())
                 .departureTimeEst(s.getDepartureTimeEst())
                 .arrivalTimeEst(s.getArrivalTimeEst())
                 .createdAt(s.getCreatedAt())
+                .updatedAt(s.getUpdatedAt())
+                .parcels(parcelList.stream().map(parcelService::toResponse).collect(Collectors.toList()))
                 .build();
     }
 }

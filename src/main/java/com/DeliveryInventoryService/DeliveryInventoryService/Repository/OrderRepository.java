@@ -29,6 +29,23 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
         @Query("SELECT DISTINCT o.wareHouseId FROM Order o WHERE o.status = :status AND o.wareHouseId IS NOT NULL")
         List<UUID> findDistinctWareHouseIdsByStatus(@Param("status") OrderStatus status);
+
+        @Query("""
+                SELECT o FROM Order o
+                WHERE o.wareHouseId = :warehouseId
+                  AND o.status = :status
+                  AND NOT EXISTS (SELECT 1 FROM Parcel p WHERE p.orderId = o.id)
+                ORDER BY o.destCity, o.createdAt
+                """)
+        List<Order> findUnassignedByWarehouse(@Param("warehouseId") UUID warehouseId,
+                                              @Param("status") OrderStatus status);
+
+        @Query("SELECT o FROM Order o WHERE o.wareHouseId = :warehouseId ORDER BY o.createdAt DESC")
+        List<Order> findByWareHouseId(@Param("warehouseId") UUID warehouseId);
+
+        @Query("SELECT o FROM Order o WHERE o.wareHouseId = :warehouseId AND o.status = :status ORDER BY o.createdAt DESC")
+        List<Order> findByWareHouseIdAndStatus(@Param("warehouseId") UUID warehouseId,
+                                               @Param("status") OrderStatus status);
 }
 
 // njjoiuo9u y78y8iy7uhyu7y8ybjfhuh

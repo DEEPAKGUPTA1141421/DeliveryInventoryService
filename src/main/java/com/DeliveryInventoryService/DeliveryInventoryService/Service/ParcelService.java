@@ -371,6 +371,54 @@ public class ParcelService {
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // UPDATE / DELETE
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Update mutable Parcel fields. Status, OTPs, and rider links are *not*
+     * editable here — those go through the dedicated transition methods so
+     * the state machine + Redis caches stay consistent.
+     */
+    @Transactional
+    public ApiResponse<Object> updateParcel(UUID parcelId, UpdateParcelRequest req) {
+        Parcel parcel = parcelRepository.findById(parcelId).orElse(null);
+        if (parcel == null) return new ApiResponse<>(false, "Parcel not found", null, 404);
+
+        if (req.getWeightKg() != null && req.getWeightKg() > 0) parcel.setWeightKg(req.getWeightKg());
+        if (req.getDimensions() != null) parcel.setDimensions(req.getDimensions());
+        if (req.getDescription() != null) parcel.setDescription(req.getDescription());
+        if (req.getDestinationWarehouseId() != null) parcel.setDestinationWarehouseId(req.getDestinationWarehouseId());
+
+        parcelRepository.save(parcel);
+        return new ApiResponse<>(true, "Parcel updated", toResponse(parcel), 200);
+    }
+
+    /**
+     * Delete a parcel. Only safe before a rider has been involved — any later
+     * state would leave a real package orphaned. CANCEL the linked shipment
+     * or transition manually instead.
+     */
+    @Transactional
+    public ApiResponse<Object> deleteParcel(UUID parcelId) {
+        Parcel parcel = parcelRepository.findById(parcelId).orElse(null);
+        if (parcel == null) return new ApiResponse<>(false, "Parcel not found", null, 404);
+
+        if (parcel.getStatus() != ParcelStatus.CREATED) {
+            return new ApiResponse<>(false,
+                    "Cannot delete a parcel in " + parcel.getStatus() + " — use cancel/transition instead",
+                    null, 409);
+        }
+        if (parcel.getShipment() != null) {
+            return new ApiResponse<>(false, "Parcel is attached to a shipment", null, 409);
+        }
+
+        parcelRepository.delete(parcel);
+        etaRedisTemplate.delete("parcel:status:" + parcelId);
+        log.info("Parcel {} deleted", parcelId);
+        return new ApiResponse<>(true, "Parcel deleted", null, 200);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // QUERIES
     // ─────────────────────────────────────────────────────────────────────
 
