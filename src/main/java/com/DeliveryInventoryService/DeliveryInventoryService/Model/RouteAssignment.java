@@ -12,10 +12,11 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "route_assignments", indexes = {
-        @Index(name = "idx_ra_rider_date", columnList = "rider_id, created_at"),
-        @Index(name = "idx_ra_order_id",   columnList = "order_id"),
-        @Index(name = "idx_ra_batch_run",  columnList = "batch_run_id"),
-        @Index(name = "idx_ra_status",     columnList = "status")
+        @Index(name = "idx_ra_rider_date",      columnList = "rider_id, created_at"),
+        @Index(name = "idx_ra_order_id",        columnList = "order_id"),
+        @Index(name = "idx_ra_batch_run",       columnList = "batch_run_id"),
+        @Index(name = "idx_ra_status",          columnList = "status"),
+        @Index(name = "idx_ra_warehouse_date",  columnList = "warehouse_id, created_at")
 })
 @Data
 @NoArgsConstructor
@@ -27,6 +28,9 @@ public class RouteAssignment {
 
     @Column(name = "batch_run_id", nullable = false)
     private UUID batchRunId;
+
+    @Column(name = "warehouse_id", nullable = false)
+    private UUID warehouseId;
 
     @Column(name = "rider_id", nullable = false)
     private UUID riderId;
@@ -64,9 +68,10 @@ public class RouteAssignment {
     @Column(name = "updated_at")
     private ZonedDateTime updatedAt;
 
-    public RouteAssignment(UUID batchRunId, UUID riderId, UUID orderId,
+    public RouteAssignment(UUID batchRunId, UUID warehouseId, UUID riderId, UUID orderId,
                            int sequenceNumber, int clusterId) {
         this.batchRunId = batchRunId;
+        this.warehouseId = warehouseId;
         this.riderId = riderId;
         this.orderId = orderId;
         this.sequenceNumber = sequenceNumber;
@@ -74,6 +79,6 @@ public class RouteAssignment {
     }
 
     public enum AssignmentStatus {
-        ASSIGNED, PICKED, DELIVERED, FAILED
+        ASSIGNED, PICKED, WAREHOUSE, DELIVERED, FAILED
     }
 }

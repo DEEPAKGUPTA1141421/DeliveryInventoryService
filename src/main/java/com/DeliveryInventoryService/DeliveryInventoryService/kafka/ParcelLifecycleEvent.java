@@ -31,6 +31,7 @@ public class ParcelLifecycleEvent {
     public enum EventType {
         PARCEL_CREATED,
         PICKUP_RIDER_ASSIGNED,
+        SELLER_OTP_REQUESTED,   // rider initiates pickup → OTP SMS sent to seller
         SELLER_OTP_VERIFIED,
         WAREHOUSE_IN_OTP_SENT,
         WAREHOUSE_IN_VERIFIED,

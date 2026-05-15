@@ -59,6 +59,9 @@ public class VrpOrchestrationService {
         }
 
         List<UUID> batchRunIds = new ArrayList<>();
+        ZoneId zoneId = ZoneId.of(ZONE_ID);
+        ZonedDateTime startOfToday = ZonedDateTime.now(zoneId).toLocalDate().atStartOfDay(zoneId);
+        ZonedDateTime startOfTomorrow = startOfToday.plusDays(1);
         for (UUID warehouseId : targets) {
             List<Order> orders = orderRepository.findByWareHouseIdAndStatusIn(
                     warehouseId, List.of(OrderStatus.CREATED));
@@ -66,7 +69,8 @@ public class VrpOrchestrationService {
             if (orders.isEmpty())
                 continue;
 
-            if (batchRunRepository.existsByStatusAndWarehouseId(RunStatus.RUNNING, warehouseId)) {
+            if (batchRunRepository.existsByStatusAndWarehouseIdAndStartedAtBetween(
+                    RunStatus.RUNNING, warehouseId, startOfToday, startOfTomorrow)) {
                 log.warn("VRP already running for warehouseId={} — skipping", warehouseId);
                 continue;
             }
@@ -133,14 +137,16 @@ public class VrpOrchestrationService {
                 if (globalSlot >= riderPool.size()) {
                     throw new IllegalStateException(
                             "Rider pool exhausted: need slot=" + globalSlot +
-                            " but warehouseId=" + warehouseId + " only has " + riderPool.size() + " ACTIVE riders");
+                                    " but warehouseId=" + warehouseId + " only has " + riderPool.size()
+                                    + " ACTIVE riders");
                 }
                 UUID riderId = riderPool.get(globalSlot);
                 globalSlot++;
 
                 for (int seq = 0; seq < route.size(); seq++) {
                     Order order = route.get(seq);
-                    toSave.add(new RouteAssignment(batchRunId, riderId, order.getId(), seq + 1, clusterId));
+                    toSave.add(
+                            new RouteAssignment(batchRunId, warehouseId, riderId, order.getId(), seq + 1, clusterId));
                     order.setStatus(OrderStatus.ASSIGNED);
                     order.setRiderId(riderId);
                 }

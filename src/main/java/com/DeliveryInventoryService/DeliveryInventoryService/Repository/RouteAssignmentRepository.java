@@ -42,4 +42,13 @@ public interface RouteAssignmentRepository extends JpaRepository<RouteAssignment
             """)
     List<RouteAssignment> findActiveByRider(@Param("riderId") UUID riderId,
                                             @Param("startOfDay") ZonedDateTime startOfDay);
+
+    @Query("""
+            SELECT ra FROM RouteAssignment ra
+            WHERE ra.warehouseId = :warehouseId
+              AND ra.createdAt >= :startOfDay
+            ORDER BY ra.riderId, ra.sequenceNumber ASC
+            """)
+    List<RouteAssignment> findTodayByWarehouse(@Param("warehouseId") UUID warehouseId,
+                                                @Param("startOfDay") ZonedDateTime startOfDay);
 }

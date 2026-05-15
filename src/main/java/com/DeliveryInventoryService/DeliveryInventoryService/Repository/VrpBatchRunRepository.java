@@ -5,6 +5,7 @@ import com.DeliveryInventoryService.DeliveryInventoryService.Model.VrpBatchRun.R
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -13,5 +14,9 @@ public interface VrpBatchRunRepository extends JpaRepository<VrpBatchRun, UUID> 
 
     List<VrpBatchRun> findByStatusOrderByStartedAtDesc(RunStatus status);
 
-    boolean existsByStatusAndWarehouseId(RunStatus status, UUID warehouseId);
+    boolean existsByStatusAndWarehouseIdAndStartedAtBetween(
+            RunStatus status,
+            UUID warehouseId,
+            ZonedDateTime startOfDay,
+            ZonedDateTime endOfDay);
 }

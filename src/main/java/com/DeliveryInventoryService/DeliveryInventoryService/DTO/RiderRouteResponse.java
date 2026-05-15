@@ -21,6 +21,9 @@ public record RiderRouteResponse(
 
     public record OrderSummary(
             UUID orderId,
+            String originAddress,
+            double originLat,
+            double originLng,
             String destAddress,
             double destLat,
             double destLng,
