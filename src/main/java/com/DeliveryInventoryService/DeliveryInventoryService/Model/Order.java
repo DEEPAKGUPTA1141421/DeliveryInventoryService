@@ -102,7 +102,7 @@ public class Order {
     private OrderStatus status = OrderStatus.CREATED; // CREATED, PICKUP_SCHEDULED, IN_TRANSIT, DELIVERED
 
     public enum OrderStatus {
-        CREATED, PICKUP_SCHEDULED, PICKED, WAREHOUSE, IN_TRANSIT, DELIVERED, CANCELLED, PENDING, ASSIGNED
+        CREATED, PICKUP_SCHEDULED, PICKED, WAREHOUSE, PARCEL_CREATED, IN_TRANSIT, DELIVERED, CANCELLED, PENDING, ASSIGNED
     }
 
     public enum OrderPriority {
@@ -142,4 +142,4 @@ public class Order {
 
 // nyiyuyi ygu7uyy yu7uiy ihuhihunjkhuihyuii8u yuu8yuiyi8y
 
-// hy78y8gtu7tk7 guyuk8y7u8y y78tyyu
+// hy78y8gtu7tk7 guyuk8y7u8y y78tyyukjhjiojiojideb uhiuhirfb uhihurfhb
