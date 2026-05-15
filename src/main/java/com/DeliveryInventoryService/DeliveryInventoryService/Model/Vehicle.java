@@ -86,13 +86,4 @@ public class Vehicle {
         PICKUP
     }
 
-    public enum Status {
-        ACTIVE,
-        IN_MAINTENANCE,
-        OFFLINE
-    }
 }
-
-// huihiu gyuyuhbhjbh hhh bh bhh hhhhbhhh
-
-// nju huuhuuuuuhyuuyuuh hkhuk
