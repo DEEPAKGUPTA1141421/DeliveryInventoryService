@@ -32,8 +32,8 @@ public interface ParcelRepository extends JpaRepository<Parcel, UUID> {
     /**
      * Finds parcels that are physically at this warehouse and ready for their next
      * shipment leg. Uses currentWarehouseId so both:
-     *   - parcels arriving here from a seller (originWarehouseId == warehouseId), and
-     *   - parcels in transit whose NEXT hop starts here (intermediate hub scenario)
+     * - parcels arriving here from a seller (originWarehouseId == warehouseId), and
+     * - parcels in transit whose NEXT hop starts here (intermediate hub scenario)
      * are included. shipment IS NULL guards against double-booking.
      */
     @Query("SELECT p FROM Parcel p WHERE p.shipment IS NULL AND p.status = 'AT_WAREHOUSE' AND p.currentWarehouseId = :warehouseId")

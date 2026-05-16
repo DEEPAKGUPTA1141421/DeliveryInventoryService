@@ -34,46 +34,46 @@ import java.util.stream.Collectors;
  * Runs on a configurable cron schedule (default: every 30 minutes).
  * For every ACTIVE warehouse it:
  *
- *   1. Finds all AT_WAREHOUSE parcels that have no shipment assigned yet
- *      (findUnshippedParcels uses currentWarehouseId so intermediate-hub
- *       parcels are also picked up for their next leg).
+ * 1. Finds all AT_WAREHOUSE parcels that have no shipment assigned yet
+ * (findUnshippedParcels uses currentWarehouseId so intermediate-hub
+ * parcels are also picked up for their next leg).
  *
- *   2. Groups them by destinationWarehouseId (the parcel's FINAL destination).
- *      If a direct vehicle route exists to the final dest, we ship directly.
- *      If not, the shipment is created without ETA and vehicle assignment
- *      so the warehouse operator can manually assign later.
+ * 2. Groups them by destinationWarehouseId (the parcel's FINAL destination).
+ * If a direct vehicle route exists to the final dest, we ship directly.
+ * If not, the shipment is created without ETA and vehicle assignment
+ * so the warehouse operator can manually assign later.
  *
- *   3. Bin-packs each group using First-Fit Decreasing against the warehouse's
- *      AVAILABLE vehicle fleet.  One bin = one Shipment.
+ * 3. Bin-packs each group using First-Fit Decreasing against the warehouse's
+ * AVAILABLE vehicle fleet. One bin = one Shipment.
  *
- *   4. Persists Shipment + updates Parcel.status = IN_SHIPMENT + publishes
- *      ParcelLifecycleEvent(ASSIGNED_TO_SHIPMENT) to Kafka per parcel.
+ * 4. Persists Shipment + updates Parcel.status = IN_SHIPMENT + publishes
+ * ParcelLifecycleEvent(ASSIGNED_TO_SHIPMENT) to Kafka per parcel.
  *
- *   5. Marks used vehicles ASSIGNED.
+ * 5. Marks used vehicles ASSIGNED.
  *
  * Each warehouse is processed in its own DB transaction so a failure in one
  * does not roll back work done for others.
  *
  * Cron is configurable via:
- *   myapp.cron.shipment-auto-creation=0 * /30 * * * *
+ * myapp.cron.shipment-auto-creation=0 * /30 * * * *
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class ShipmentAutoCreationJob {
 
-    private static final String ZONE           = "Asia/Kolkata";
-    private static final long   DEPARTURE_LAG_MINUTES = 30;
-    private static final String PARCEL_STATUS_KEY     = "parcel:status:";
+    private static final String ZONE = "Asia/Kolkata";
+    private static final long DEPARTURE_LAG_MINUTES = 30;
+    private static final String PARCEL_STATUS_KEY = "parcel:status:";
 
-    private final WarehouseRepository    warehouseRepository;
-    private final ParcelRepository       parcelRepository;
-    private final ShipmentRepository     shipmentRepository;
-    private final VehicleRepository      vehicleRepository;
-    private final InterCityRouteService  interCityRouteService;
+    private final WarehouseRepository warehouseRepository;
+    private final ParcelRepository parcelRepository;
+    private final ShipmentRepository shipmentRepository;
+    private final VehicleRepository vehicleRepository;
+    private final InterCityRouteService interCityRouteService;
     private final ParcelLifecycleProducer lifecycleProducer;
     private final RedisTemplate<String, Object> redisTemplate;
-    private final TransactionTemplate    txTemplate;
+    private final TransactionTemplate txTemplate;
 
     // ── Entry point ───────────────────────────────────────────────────────────
 
@@ -125,7 +125,7 @@ public class ShipmentAutoCreationJob {
         int created = 0;
 
         for (Map.Entry<UUID, List<Parcel>> entry : byDest.entrySet()) {
-            UUID destId    = entry.getKey();
+            UUID destId = entry.getKey();
             List<Parcel> parcels = entry.getValue();
 
             Warehouse dest = warehouseRepository.findById(destId).orElse(null);
@@ -143,7 +143,7 @@ public class ShipmentAutoCreationJob {
 
             for (List<Parcel> bin : bins) {
                 double binWeight = bin.stream().mapToDouble(Parcel::getWeightKg).sum();
-                Vehicle vehicle  = pickVehicle(binWeight, availableVehicles);
+                Vehicle vehicle = pickVehicle(binWeight, availableVehicles);
 
                 Shipment shipment = buildShipment(warehouse, dest, vehicle, eta);
                 shipment = shipmentRepository.save(shipment);
@@ -178,15 +178,16 @@ public class ShipmentAutoCreationJob {
     // ── Shipment builder ──────────────────────────────────────────────────────
 
     private Shipment buildShipment(Warehouse origin, Warehouse dest,
-                                   Vehicle vehicle, CityRouteEtaEntry eta) {
-        ZonedDateTime now       = ZonedDateTime.now(ZoneId.of(ZONE));
+            Vehicle vehicle, CityRouteEtaEntry eta) {
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of(ZONE));
         ZonedDateTime departure = now.plusMinutes(DEPARTURE_LAG_MINUTES);
-        ZonedDateTime arrival   = (eta != null)
+        ZonedDateTime arrival = (eta != null)
                 ? departure.plusSeconds(eta.getTotalTravelTimeSeconds())
                 : departure.plusHours(8); // conservative fallback if no route data
 
         String shipmentType = origin.getCity().equalsIgnoreCase(dest.getCity())
-                ? "LAST_MILE" : "INTER_HUB";
+                ? "LAST_MILE"
+                : "INTER_HUB";
 
         Shipment s = new Shipment();
         s.setShipmentNo(Shipment.generateShipmentNo());
@@ -203,15 +204,21 @@ public class ShipmentAutoCreationJob {
             s.setCostEstimate(eta.getTotalDistanceKm() * 12); // ₹12/km placeholder
         }
         s.setStatus(vehicle != null ? ShipmentStatus.ASSIGNED : ShipmentStatus.CREATED);
+        // Auto-assign the rider paired with this vehicle (Vehicle has a OneToOne Rider)
+        if (vehicle != null && vehicle.getRider() != null) {
+            s.setRiderId(vehicle.getRider().getId());
+        }
         return s;
     }
 
     // ── ETA resolution ────────────────────────────────────────────────────────
 
     private CityRouteEtaEntry resolveEta(String origin, String dest) {
-        if (origin.equalsIgnoreCase(dest)) return null;
+        if (origin.equalsIgnoreCase(dest))
+            return null;
         CityRouteEtaEntry cached = interCityRouteService.getCached(origin, dest);
-        if (cached != null) return cached;
+        if (cached != null)
+            return cached;
         try {
             return interCityRouteService.computeAndCache(origin, dest);
         } catch (Exception e) {
@@ -224,7 +231,7 @@ public class ShipmentAutoCreationJob {
     //
     // Sorts parcels heaviest-first, then places each into the first bin that
     // can still accommodate it without exceeding the largest available vehicle's
-    // capacity.  Parcels that exceed every vehicle are placed in their own
+    // capacity. Parcels that exceed every vehicle are placed in their own
     // oversized bin so nothing is silently dropped.
 
     private List<List<Parcel>> binPack(List<Parcel> parcels, List<Vehicle> vehicles) {
@@ -237,11 +244,11 @@ public class ShipmentAutoCreationJob {
                 .sorted(Comparator.comparingDouble(Parcel::getWeightKg).reversed())
                 .collect(Collectors.toList());
 
-        List<List<Parcel>> bins   = new ArrayList<>();
-        List<Double>       totals = new ArrayList<>();
+        List<List<Parcel>> bins = new ArrayList<>();
+        List<Double> totals = new ArrayList<>();
 
         for (Parcel p : sorted) {
-            double w     = p.getWeightKg();
+            double w = p.getWeightKg();
             boolean placed = false;
             for (int i = 0; i < bins.size(); i++) {
                 if (totals.get(i) + w <= maxCapacity) {
@@ -264,7 +271,8 @@ public class ShipmentAutoCreationJob {
 
     /** Smallest vehicle with capacity >= required, or largest if none fits. */
     private Vehicle pickVehicle(double requiredKg, List<Vehicle> sortedVehicles) {
-        if (sortedVehicles.isEmpty()) return null;
+        if (sortedVehicles.isEmpty())
+            return null;
         return sortedVehicles.stream()
                 .filter(v -> v.getCapacityKg() >= requiredKg)
                 .findFirst()

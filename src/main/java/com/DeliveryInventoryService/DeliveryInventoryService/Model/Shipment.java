@@ -28,6 +28,9 @@ public class Shipment {
 
     private UUID vehicleId;
 
+    /** Rider assigned to physically transport this shipment (set at creation time). */
+    private UUID riderId;
+
     private UUID vehicleScheduleId;
 
     private UUID originWarehouseId;
@@ -54,7 +57,7 @@ public class Shipment {
     private ShipmentStatus status = ShipmentStatus.CREATED;
 
     public enum ShipmentStatus {
-        CREATED, ASSIGNED, PICKED_UP, IN_TRANSIT, ARRIVED, DELIVERED, CANCELLED
+        CREATED, ASSIGNED, DISPATCHED, IN_TRANSIT, AT_DESTINATION, DELIVERED, CANCELLED
     }
 
     @OneToMany(mappedBy = "shipment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)

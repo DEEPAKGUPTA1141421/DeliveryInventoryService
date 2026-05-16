@@ -40,4 +40,9 @@ public interface ShipmentRepository extends JpaRepository<Shipment, UUID> {
         List<Shipment> findOpenShipments(
                         @Param("warehouseId") UUID warehouseId,
                         @Param("destWarehouseId") UUID destWarehouseId);
+
+        /** All shipments assigned to a specific rider that are in one of the given statuses. */
+        List<Shipment> findByRiderIdAndStatusInOrderByCreatedAtDesc(
+                        UUID riderId,
+                        List<ShipmentStatus> statuses);
 }

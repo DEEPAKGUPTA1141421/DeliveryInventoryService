@@ -4,6 +4,7 @@ import com.DeliveryInventoryService.DeliveryInventoryService.Model.Order;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.OtpLog;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Parcel;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Shipment;
+import com.DeliveryInventoryService.DeliveryInventoryService.Model.ShipmentLeg;
 import lombok.Builder;
 import lombok.Data;
 
@@ -59,6 +60,7 @@ public class WarehouseDTO {
         private UUID destinationWarehouseId;
         private List<UUID> parcelIds; // parcels to include
         private UUID vehicleId; // optional: pre-assign vehicle
+        private UUID riderId;  // optional: rider who will physically transport this shipment
         private ZonedDateTime departureTimeEst;
         private ZonedDateTime arrivalTimeEst;
     }
@@ -75,6 +77,7 @@ public class WarehouseDTO {
         private String shipmentNo;
         private String shipmentType;
         private UUID vehicleId;
+        private UUID riderId;
         private UUID originWarehouseId;
         private UUID destinationWarehouseId;
         private String originCity;
@@ -415,6 +418,95 @@ public class WarehouseDTO {
         private List<String> errors;
     }
 
+    // ── Shipment Transfer Session (Dispatch / Receive) ────────────────────────
+    //
+    //  Session types and the shipment status transition each one commits:
+    //    DISPATCH_OUT         ASSIGNED/CREATED → DISPATCHED
+    //    HAND_TO_VEHICLE      DISPATCHED       → IN_TRANSIT
+    //    RECEIVE_FROM_VEHICLE IN_TRANSIT       → AT_DESTINATION
+    //    RECEIVE_IN           AT_DESTINATION   → DELIVERED
+
+    @Data
+    public static class StartShipmentTransferRequest {
+        /** One of: DISPATCH_OUT | HAND_TO_VEHICLE | RECEIVE_FROM_VEHICLE | RECEIVE_IN */
+        private String sessionType;
+        /**
+         * DISPATCH_OUT only: any shipment number from the batch being dispatched.
+         * The rider assigned to that shipment is auto-resolved; OTP is sent to their phone.
+         */
+        private String referenceShipmentNo;
+        /** RECEIVE_IN only: rider ID who is delivering the arriving shipments */
+        private UUID riderId;
+        /** Phone of the receiving party (driver/transporter) — for HAND_TO_VEHICLE / RECEIVE_FROM_VEHICLE */
+        private String partyPhone;
+        /** Human-readable name of the other party */
+        private String partyName;
+    }
+
+    @Data
+    @Builder
+    public static class StartShipmentTransferResponse {
+        private String sessionId;
+        private String sessionType;
+        private String partyName;
+        private String partyPhoneMasked;
+        private String message;
+    }
+
+    @Data
+    public static class ScanShipmentRequest {
+        private String shipmentNo;
+    }
+
+    @Data
+    @Builder
+    public static class ScannedShipmentItem {
+        private String shipmentNo;
+        private UUID shipmentId;
+        private String originCity;
+        private String destinationCity;
+        private int parcelCount;
+        private Shipment.ShipmentStatus currentStatus;
+        /** Populated for /my-shipments — lets the rider verify they're handing to the right vehicle. */
+        private String vehicleNumber;
+        private String vehicleType;
+        private String assignedDriverName;
+        private String assignedDriverPhoneMasked;
+    }
+
+    @Data
+    @Builder
+    public static class ScanShipmentResponse {
+        private String shipmentNo;
+        private boolean accepted;
+        private String reason;
+        private int totalScanned;
+        private List<ScannedShipmentItem> scannedShipments;
+    }
+
+    @Data
+    @Builder
+    public static class ShipmentTransferSessionStatus {
+        private String sessionId;
+        private String sessionType;
+        private UUID riderId;
+        private String partyName;
+        private String partyPhoneMasked;
+        private String status;
+        private int totalScanned;
+        private List<ScannedShipmentItem> scannedShipments;
+    }
+
+    @Data
+    @Builder
+    public static class ConfirmTransferResponse {
+        private int processed;
+        private int skipped;
+        private List<String> processedShipmentNos;
+        private List<String> skippedShipmentNos;
+        private List<String> errors;
+    }
+
     // ── Update payloads ────────────────────────────────────────────────────
 
     @Data
@@ -432,5 +524,30 @@ public class WarehouseDTO {
         private String departureTimeEst;   // ISO-8601
         private String arrivalTimeEst;
         private Double costEstimate;
+    }
+
+    // ── Shipment route legs ───────────────────────────────────────────────────
+    //
+    //  Returned by GET /api/v1/riders/{riderId}/shipments/{shipmentNo}/route
+    //  Shows every physical hop the shipment takes from origin to destination,
+    //  including which rider dispatched it and which rider received it at each hop.
+
+    @Data
+    @Builder
+    public static class ShipmentLegResponse {
+        private UUID id;
+        private int sequence;
+        private UUID fromWarehouseId;
+        private UUID toWarehouseId;
+        private String fromCity;
+        private String toCity;
+        private UUID dispatchingRiderId;
+        private String dispatchingRiderName;
+        private UUID receivingRiderId;
+        private String receivingRiderName;
+        private ShipmentLeg.ShipmentLegStatus status;
+        private ZonedDateTime estimatedArrival;
+        private ZonedDateTime actualArrival;
+        private ZonedDateTime createdAt;
     }
 }

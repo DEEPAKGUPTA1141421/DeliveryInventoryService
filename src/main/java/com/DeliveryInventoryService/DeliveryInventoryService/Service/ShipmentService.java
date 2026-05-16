@@ -5,6 +5,8 @@ import com.DeliveryInventoryService.DeliveryInventoryService.DTO.WarehouseDTO.*;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.*;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Parcel.ParcelStatus;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Shipment.ShipmentStatus;
+import com.DeliveryInventoryService.DeliveryInventoryService.Model.ShipmentLeg;
+import com.DeliveryInventoryService.DeliveryInventoryService.Model.ShipmentLeg.ShipmentLegStatus;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.*;
 import com.DeliveryInventoryService.DeliveryInventoryService.Utils.GeoUtils;
 import com.DeliveryInventoryService.DeliveryInventoryService.kafka.ParcelLifecycleEvent;
@@ -44,6 +46,7 @@ public class ShipmentService {
     private final WarehouseRepository warehouseRepository;
     private final ParcelService parcelService;
     private final RiderRepository riderRepository;
+    private final ShipmentLegRepository shipmentLegRepository;
     private final ParcelLifecycleProducer lifecycleProducer;
     private final RedisTemplate<String, Object> etaRedisTemplate;
 
@@ -71,6 +74,7 @@ public class ShipmentService {
         shipment.setOriginCity(origin.getCity());
         shipment.setDestinationCity(dest.getCity());
         shipment.setVehicleId(req.getVehicleId());
+        shipment.setRiderId(req.getRiderId());
         shipment.setDepartureTimeEst(req.getDepartureTimeEst());
         shipment.setArrivalTimeEst(req.getArrivalTimeEst());
         shipment.setCreatedByAdminId(adminId);
@@ -78,6 +82,24 @@ public class ShipmentService {
 
         shipment = shipmentRepository.save(shipment);
         cacheShipmentStatus(shipment);
+
+        // Record leg 0 — the initial origin→destination hop
+        ShipmentLeg leg = new ShipmentLeg();
+        leg.setShipmentId(shipment.getId());
+        leg.setSequence(0);
+        leg.setFromWarehouseId(origin.getId());
+        leg.setToWarehouseId(dest.getId());
+        leg.setFromCity(origin.getCity());
+        leg.setToCity(dest.getCity());
+        leg.setEstimatedArrival(req.getArrivalTimeEst());
+        leg.setStatus(ShipmentLegStatus.PENDING);
+        if (req.getRiderId() != null) {
+            riderRepository.findById(req.getRiderId()).ifPresent(r -> {
+                leg.setDispatchingRiderId(r.getId());
+                leg.setDispatchingRiderName(r.getName());
+            });
+        }
+        shipmentLegRepository.save(leg);
 
         // Attach parcels if provided
         if (req.getParcelIds() != null && !req.getParcelIds().isEmpty()) {
@@ -233,7 +255,7 @@ public class ShipmentService {
             });
         }
 
-        if (next == ShipmentStatus.ARRIVED) {
+        if (next == ShipmentStatus.AT_DESTINATION) {
             UUID shipmentDestId = shipment.getDestinationWarehouseId();
             parcelRepository.findByShipmentId(shipmentId).forEach(p -> {
                 p.setCurrentWarehouseId(shipmentDestId);
@@ -245,8 +267,7 @@ public class ShipmentService {
                     p.setStatus(ParcelStatus.AT_DEST_WAREHOUSE);
                 } else {
                     // Intermediate hub: clear shipment link so cron/planner can re-bag
-                    // for the next leg. Setting status back to AT_WAREHOUSE makes it
-                    // visible to findUnshippedParcels at the hub warehouse.
+                    // for the next leg.
                     p.setStatus(ParcelStatus.AT_WAREHOUSE);
                     p.setShipment(null);
                 }
@@ -310,7 +331,7 @@ public class ShipmentService {
                 .shipmentsInTransit(shipmentRepository
                         .findByOriginWarehouseIdAndStatus(warehouseId, ShipmentStatus.IN_TRANSIT).size())
                 .shipmentsArrived(shipmentRepository
-                        .findByDestinationWarehouseIdAndStatus(warehouseId, ShipmentStatus.ARRIVED).size())
+                        .findByDestinationWarehouseIdAndStatus(warehouseId, ShipmentStatus.AT_DESTINATION).size())
                 .activeRiders(activeRiders)
                 .build();
 
@@ -358,11 +379,14 @@ public class ShipmentService {
 
     private boolean isValidTransition(ShipmentStatus from, ShipmentStatus to) {
         return switch (from) {
-            case CREATED -> to == ShipmentStatus.ASSIGNED || to == ShipmentStatus.CANCELLED;
-            case ASSIGNED -> to == ShipmentStatus.PICKED_UP || to == ShipmentStatus.CANCELLED;
-            case PICKED_UP -> to == ShipmentStatus.IN_TRANSIT;
-            case IN_TRANSIT -> to == ShipmentStatus.ARRIVED;
-            case ARRIVED -> to == ShipmentStatus.DELIVERED;
+            // CREATED → DISPATCHED allowed when no explicit ASSIGNED step occurred
+            case CREATED -> to == ShipmentStatus.ASSIGNED
+                         || to == ShipmentStatus.DISPATCHED
+                         || to == ShipmentStatus.CANCELLED;
+            case ASSIGNED -> to == ShipmentStatus.DISPATCHED || to == ShipmentStatus.CANCELLED;
+            case DISPATCHED -> to == ShipmentStatus.IN_TRANSIT;
+            case IN_TRANSIT -> to == ShipmentStatus.AT_DESTINATION;
+            case AT_DESTINATION -> to == ShipmentStatus.DELIVERED;
             default -> false;
         };
     }
@@ -465,6 +489,7 @@ public class ShipmentService {
                 .shipmentNo(s.getShipmentNo())
                 .shipmentType(s.getShipmentType())
                 .vehicleId(s.getVehicleId())
+                .riderId(s.getRiderId())
                 .originWarehouseId(s.getOriginWarehouseId())
                 .destinationWarehouseId(s.getDestinationWarehouseId())
                 .originCity(s.getOriginCity())
