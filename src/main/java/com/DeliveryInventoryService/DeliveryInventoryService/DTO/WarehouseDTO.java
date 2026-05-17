@@ -550,4 +550,44 @@ public class WarehouseDTO {
         private ZonedDateTime actualArrival;
         private ZonedDateTime createdAt;
     }
+
+    /** Vehicle/driver that is currently carrying an IN_TRANSIT shipment. */
+    @Data
+    @Builder
+    public static class ShipmentCarrierInfo {
+        private String vehicleNumber;
+        private String vehicleType;
+        private String driverName;
+        private String driverPhoneMasked;
+        /** Taken from VehicleSchedule.arrivalDateTime when available. */
+        private ZonedDateTime estimatedArrival;
+        private String fromCity;
+        private String toCity;
+    }
+
+    /** Full tracking response for a single shipment (route + current carrier). */
+    @Data
+    @Builder
+    public static class ShipmentTrackResponse {
+        private String shipmentNo;
+        private Shipment.ShipmentStatus status;
+        private String originCity;
+        private String destinationCity;
+        private int parcelCount;
+        /** Non-null only while the shipment is IN_TRANSIT. */
+        private ShipmentCarrierInfo currentCarrier;
+        private List<ShipmentLegResponse> legs;
+    }
+
+    /** An IN_TRANSIT shipment headed to this rider's destination warehouse. */
+    @Data
+    @Builder
+    public static class IncomingShipmentItem {
+        private String shipmentNo;
+        private UUID shipmentId;
+        private String originCity;
+        private String destinationCity;
+        private int parcelCount;
+        private ShipmentCarrierInfo carrier;
+    }
 }

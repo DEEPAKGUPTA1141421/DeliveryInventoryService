@@ -11,10 +11,12 @@ import com.DeliveryInventoryService.DeliveryInventoryService.Model.ShipmentTrans
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.ShipmentTransferSession.SessionType;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.ShipmentTransferSession.Status;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Vehicle;
+import com.DeliveryInventoryService.DeliveryInventoryService.Model.VehicleSchedule;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.RiderRepository;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.ShipmentLegRepository;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.ShipmentRepository;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.VehicleRepository;
+import com.DeliveryInventoryService.DeliveryInventoryService.Repository.VehicleScheduleRepository;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.WarehouseRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -35,18 +37,18 @@ import java.util.stream.Collectors;
  * Sessions live in Redis for 2 hours — one session per handoff event.
  *
  * Session types (one per leg of the inter-warehouse journey):
- *   DISPATCH_OUT         Warehouse admin → outgoing rider
- *   HAND_TO_VEHICLE      Rider → vehicle/transporter at bus stand
- *   RECEIVE_FROM_VEHICLE Vehicle/transporter → destination rider
- *   RECEIVE_IN           Incoming rider → destination warehouse admin
+ * DISPATCH_OUT Warehouse admin → outgoing rider
+ * HAND_TO_VEHICLE Rider → vehicle/transporter at bus stand
+ * RECEIVE_FROM_VEHICLE Vehicle/transporter → destination rider
+ * RECEIVE_IN Incoming rider → destination warehouse admin
  *
  * API flow (mirrors HandoverSessionService):
- *   1. POST  /session/start                → OTP sent to receiving party
- *   2. POST  /session/{id}/verify-otp      → party identity confirmed; session ACTIVE
- *   3. POST  /session/{id}/scan            → admin scans each shipment number
- *   4. DELETE /session/{id}/scan/{no}      → undo a mistaken scan
- *   5. GET   /session/{id}                 → current state + scanned list
- *   6. POST  /session/{id}/confirm         → advance all scanned shipments' status
+ * 1. POST /session/start → OTP sent to receiving party
+ * 2. POST /session/{id}/verify-otp → party identity confirmed; session ACTIVE
+ * 3. POST /session/{id}/scan → admin scans each shipment number
+ * 4. DELETE /session/{id}/scan/{no} → undo a mistaken scan
+ * 5. GET /session/{id} → current state + scanned list
+ * 6. POST /session/{id}/confirm → advance all scanned shipments' status
  */
 @Service
 @RequiredArgsConstructor
@@ -61,6 +63,7 @@ public class ShipmentTransferSessionService {
     private final ShipmentLegRepository shipmentLegRepository;
     private final WarehouseRepository warehouseRepository;
     private final VehicleRepository vehicleRepository;
+    private final VehicleScheduleRepository vehicleScheduleRepository;
     private final ShipmentService shipmentService;
 
     private static final long SESSION_TTL_HOURS = 2;
@@ -109,7 +112,8 @@ public class ShipmentTransferSessionService {
             if (refShipment.getRiderId() == null) {
                 return new ApiResponse<>(false,
                         "No rider assigned to shipment " + req.getReferenceShipmentNo()
-                                + ". Assign a rider to the shipment first.", null, 400);
+                                + ". Assign a rider to the shipment first.",
+                        null, 400);
             }
             Rider rider = riderRepository.findById(refShipment.getRiderId()).orElse(null);
             if (rider == null) {
@@ -333,6 +337,7 @@ public class ShipmentTransferSessionService {
                 .findByShipmentNo(req.getReferenceShipmentNo().trim().toUpperCase())
                 .orElse(null);
         if (refShipment == null) {
+            
             return new ApiResponse<>(false,
                     "Shipment " + req.getReferenceShipmentNo() + " not found", null, 404);
         }
@@ -342,14 +347,13 @@ public class ShipmentTransferSessionService {
                 ? refShipment.getOriginWarehouseId()
                 : refShipment.getDestinationWarehouseId();
 
-        // Resolve party phone — auto-resolve from the assigned vehicle driver for HAND_TO_VEHICLE
+        // Resolve party phone — auto-resolve from the assigned vehicle driver for
+        // HAND_TO_VEHICLE
         String partyPhone = req.getPartyPhone();
         String partyName = req.getPartyName();
 
-        if ((partyPhone == null || partyPhone.isBlank())
-                && sessionType == SessionType.HAND_TO_VEHICLE
-                && refShipment.getVehicleId() != null) {
-            Vehicle vehicle = vehicleRepository.findById(refShipment.getVehicleId()).orElse(null);
+        if (partyPhone == null || partyPhone.isBlank()) {
+            Vehicle vehicle = resolveVehicle(refShipment);
             if (vehicle != null && vehicle.getRider() != null) {
                 Rider driver = vehicle.getRider();
                 partyPhone = driver.getPhone();
@@ -364,9 +368,8 @@ public class ShipmentTransferSessionService {
 
         if (partyPhone == null || partyPhone.isBlank()) {
             return new ApiResponse<>(false,
-                    sessionType == SessionType.HAND_TO_VEHICLE
-                        ? "No driver phone found. The vehicle assigned to this shipment has no driver — assign a driver to the vehicle, or enter the phone manually."
-                        : "partyPhone required (truck/bus driver's phone number)",
+                    "No driver phone found. The vehicle assigned to this shipment has no driver — "
+                            + "assign a driver to the vehicle, or enter the phone manually.",
                     null, 400);
         }
 
@@ -403,12 +406,17 @@ public class ShipmentTransferSessionService {
 
     public ApiResponse<Object> verifyOtpForRider(UUID riderId, String sessionId, VerifyHandoverOtpRequest req) {
         ShipmentTransferSession session = loadSession(sessionId);
-        if (session == null) return new ApiResponse<>(false, "Session not found or expired", null, 404);
+        if (session == null)
+            return new ApiResponse<>(false, "Session not found or expired", null, 404);
         String err = checkRiderOwnership(session, riderId);
-        if (err != null) return new ApiResponse<>(false, err, null, 403);
-        if (session.getStatus() == Status.COMPLETED) return new ApiResponse<>(false, "Session already completed", null, 409);
-        if (session.getStatus() == Status.ACTIVE) return new ApiResponse<>(false, "Identity already verified", null, 409);
-        if (!session.getOtp().equals(req.getOtp())) return new ApiResponse<>(false, "Invalid OTP", null, 400);
+        if (err != null)
+            return new ApiResponse<>(false, err, null, 403);
+        if (session.getStatus() == Status.COMPLETED)
+            return new ApiResponse<>(false, "Session already completed", null, 409);
+        if (session.getStatus() == Status.ACTIVE)
+            return new ApiResponse<>(false, "Identity already verified", null, 409);
+        if (!session.getOtp().equals(req.getOtp()))
+            return new ApiResponse<>(false, "Invalid OTP", null, 400);
         session.setStatus(Status.ACTIVE);
         saveSession(session);
         log.info("Rider session {} — {} verified", sessionId, session.getPartyName());
@@ -419,9 +427,11 @@ public class ShipmentTransferSessionService {
     @Transactional(readOnly = true)
     public ApiResponse<Object> scanShipmentForRider(UUID riderId, String sessionId, ScanShipmentRequest req) {
         ShipmentTransferSession session = loadSession(sessionId);
-        if (session == null) return new ApiResponse<>(false, "Session not found or expired", null, 404);
+        if (session == null)
+            return new ApiResponse<>(false, "Session not found or expired", null, 404);
         String err = checkRiderOwnership(session, riderId);
-        if (err != null) return new ApiResponse<>(false, err, null, 403);
+        if (err != null)
+            return new ApiResponse<>(false, err, null, 403);
         if (session.getStatus() != Status.ACTIVE) {
             return new ApiResponse<>(false,
                     "Session not active — verify OTP first (status: " + session.getStatus() + ")", null, 409);
@@ -431,9 +441,11 @@ public class ShipmentTransferSessionService {
             return buildScanResponse(session, shipmentNo, false, "Already scanned in this session");
         }
         Shipment shipment = shipmentRepository.findByShipmentNo(shipmentNo).orElse(null);
-        if (shipment == null) return buildScanResponse(session, shipmentNo, false, "Shipment not found");
+        if (shipment == null)
+            return buildScanResponse(session, shipmentNo, false, "Shipment not found");
         String validationError = validateScanForSessionType(session, shipment);
-        if (validationError != null) return buildScanResponse(session, shipmentNo, false, validationError);
+        if (validationError != null)
+            return buildScanResponse(session, shipmentNo, false, validationError);
         session.getScannedShipmentNos().add(shipmentNo);
         saveSession(session);
         log.info("Rider session {} — scanned {} ({} total)", sessionId, shipmentNo,
@@ -443,10 +455,13 @@ public class ShipmentTransferSessionService {
 
     public ApiResponse<Object> removeShipmentForRider(UUID riderId, String sessionId, String shipmentNo) {
         ShipmentTransferSession session = loadSession(sessionId);
-        if (session == null) return new ApiResponse<>(false, "Session not found or expired", null, 404);
+        if (session == null)
+            return new ApiResponse<>(false, "Session not found or expired", null, 404);
         String err = checkRiderOwnership(session, riderId);
-        if (err != null) return new ApiResponse<>(false, err, null, 403);
-        if (session.getStatus() != Status.ACTIVE) return new ApiResponse<>(false, "Session not active", null, 409);
+        if (err != null)
+            return new ApiResponse<>(false, err, null, 403);
+        if (session.getStatus() != Status.ACTIVE)
+            return new ApiResponse<>(false, "Session not active", null, 409);
         String normalised = shipmentNo.trim().toUpperCase();
         if (!session.getScannedShipmentNos().remove(normalised)) {
             return new ApiResponse<>(false, "Shipment not in scanned list", null, 404);
@@ -458,18 +473,23 @@ public class ShipmentTransferSessionService {
     @Transactional(readOnly = true)
     public ApiResponse<Object> getSessionForRider(UUID riderId, String sessionId) {
         ShipmentTransferSession session = loadSession(sessionId);
-        if (session == null) return new ApiResponse<>(false, "Session not found or expired", null, 404);
+        if (session == null)
+            return new ApiResponse<>(false, "Session not found or expired", null, 404);
         String err = checkRiderOwnership(session, riderId);
-        if (err != null) return new ApiResponse<>(false, err, null, 403);
+        if (err != null)
+            return new ApiResponse<>(false, err, null, 403);
         return new ApiResponse<>(true, "OK", buildSessionStatus(session), 200);
     }
 
     public ApiResponse<Object> confirmTransferForRider(UUID riderId, String sessionId) {
         ShipmentTransferSession session = loadSession(sessionId);
-        if (session == null) return new ApiResponse<>(false, "Session not found or expired", null, 404);
+        if (session == null)
+            return new ApiResponse<>(false, "Session not found or expired", null, 404);
         String err = checkRiderOwnership(session, riderId);
-        if (err != null) return new ApiResponse<>(false, err, null, 403);
-        if (session.getStatus() != Status.ACTIVE) return new ApiResponse<>(false, "Session not active", null, 409);
+        if (err != null)
+            return new ApiResponse<>(false, err, null, 403);
+        if (session.getStatus() != Status.ACTIVE)
+            return new ApiResponse<>(false, "Session not active", null, 409);
         if (session.getScannedShipmentNos().isEmpty()) {
             return new ApiResponse<>(false, "No shipments scanned — scan at least one before confirming", null, 400);
         }
@@ -482,8 +502,8 @@ public class ShipmentTransferSessionService {
         String targetStatus = targetStatusFor(session.getSessionType());
 
         List<String> processed = new ArrayList<>();
-        List<String> skipped   = new ArrayList<>();
-        List<String> errors    = new ArrayList<>();
+        List<String> skipped = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
 
         for (String shipmentNo : session.getScannedShipmentNos()) {
             try {
@@ -494,7 +514,8 @@ public class ShipmentTransferSessionService {
                     continue;
                 }
 
-                // For DISPATCH_OUT: allow CREATED → DISPATCHED by first moving to ASSIGNED if needed
+                // For DISPATCH_OUT: allow CREATED → DISPATCHED by first moving to ASSIGNED if
+                // needed
                 if (session.getSessionType() == SessionType.DISPATCH_OUT
                         && shipment.getStatus() == ShipmentStatus.CREATED) {
                     ApiResponse<Object> assignResp = shipmentService.updateShipmentStatus(shipment.getId(), "ASSIGNED");
@@ -509,6 +530,7 @@ public class ShipmentTransferSessionService {
                 if (resp.success()) {
                     processed.add(shipmentNo);
                     log.info("ShipmentTransfer session {} — {} → {}", sessionId, shipmentNo, targetStatus);
+                    updateShipmentRider(session, shipment);
                     advanceLeg(session, shipment);
                 } else {
                     skipped.add(shipmentNo);
@@ -540,12 +562,42 @@ public class ShipmentTransferSessionService {
     }
 
     /**
-     * Advances the ShipmentLeg record to reflect the physical state after a transfer session confirms.
+     * Updates shipment.riderId to reflect who is physically holding the shipment
+     * after this handoff.
      *
-     * DISPATCH_OUT         → PENDING leg becomes DISPATCHED; dispatchingRider recorded from session.
-     * HAND_TO_VEHICLE      → DISPATCHED leg becomes IN_TRANSIT.
-     * RECEIVE_FROM_VEHICLE → IN_TRANSIT leg becomes COMPLETED; receivingRider recorded from session owner.
-     * RECEIVE_IN           → internal warehouse op; no leg change needed.
+     * DISPATCH_OUT → rider picks up from warehouse → riderId = session.riderId
+     * HAND_TO_VEHICLE → rider hands to vehicle/transporter → riderId = null
+     * (vehicle driver holds it)
+     * RECEIVE_FROM_VEHICLE → destination rider takes from vehicle → riderId =
+     * session.ownerRiderId
+     * RECEIVE_IN → warehouse accepts from rider → riderId = null
+     */
+    private void updateShipmentRider(ShipmentTransferSession session, Shipment shipment) {
+        try {
+            UUID newRiderId = switch (session.getSessionType()) {
+                case DISPATCH_OUT -> session.getRiderId();
+                case RECEIVE_FROM_VEHICLE -> session.getOwnerRiderId();
+                case HAND_TO_VEHICLE, RECEIVE_IN -> null;
+            };
+            shipment.setRiderId(newRiderId);
+            shipmentRepository.save(shipment);
+            log.info("ShipmentTransfer — shipment {} riderId updated to {}", shipment.getShipmentNo(), newRiderId);
+        } catch (Exception ex) {
+            log.warn("updateShipmentRider: could not update riderId for shipment {} — {}",
+                    shipment.getShipmentNo(), ex.getMessage());
+        }
+    }
+
+    /**
+     * Advances the ShipmentLeg record to reflect the physical state after a
+     * transfer session confirms.
+     *
+     * DISPATCH_OUT → PENDING leg becomes DISPATCHED; dispatchingRider recorded from
+     * session.
+     * HAND_TO_VEHICLE → DISPATCHED leg becomes IN_TRANSIT.
+     * RECEIVE_FROM_VEHICLE → IN_TRANSIT leg becomes COMPLETED; receivingRider
+     * recorded from session owner.
+     * RECEIVE_IN → internal warehouse op; no leg change needed.
      */
     private void advanceLeg(ShipmentTransferSession session, Shipment shipment) {
         try {
@@ -576,7 +628,8 @@ public class ShipmentTransferSessionService {
                             leg.setStatus(ShipmentLegStatus.COMPLETED);
                             leg.setActualArrival(java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata")));
                             UUID receivingId = session.getOwnerRiderId() != null
-                                    ? session.getOwnerRiderId() : session.getRiderId();
+                                    ? session.getOwnerRiderId()
+                                    : session.getRiderId();
                             if (receivingId != null) {
                                 riderRepository.findById(receivingId).ifPresent(r -> {
                                     leg.setReceivingRiderId(r.getId());
@@ -591,7 +644,8 @@ public class ShipmentTransferSessionService {
                 }
             }
         } catch (Exception ex) {
-            log.warn("advanceLeg: could not update leg for shipment {} — {}", shipment.getShipmentNo(), ex.getMessage());
+            log.warn("advanceLeg: could not update leg for shipment {} — {}", shipment.getShipmentNo(),
+                    ex.getMessage());
         }
     }
 
@@ -647,19 +701,19 @@ public class ShipmentTransferSessionService {
 
     private String targetStatusFor(SessionType type) {
         return switch (type) {
-            case DISPATCH_OUT        -> "DISPATCHED";
-            case HAND_TO_VEHICLE     -> "IN_TRANSIT";
+            case DISPATCH_OUT -> "DISPATCHED";
+            case HAND_TO_VEHICLE -> "IN_TRANSIT";
             case RECEIVE_FROM_VEHICLE -> "AT_DESTINATION";
-            case RECEIVE_IN          -> "DELIVERED";
+            case RECEIVE_IN -> "DELIVERED";
         };
     }
 
     // ── Response builders ─────────────────────────────────────────────────
 
     private ApiResponse<Object> buildScanResponse(ShipmentTransferSession session,
-                                                   String shipmentNo,
-                                                   boolean accepted,
-                                                   String reason) {
+            String shipmentNo,
+            boolean accepted,
+            String reason) {
         return new ApiResponse<>(true, accepted ? "Shipment scanned" : reason,
                 ScanShipmentResponse.builder()
                         .shipmentNo(shipmentNo)
@@ -685,7 +739,8 @@ public class ShipmentTransferSessionService {
     }
 
     private List<ScannedShipmentItem> resolveScannedItems(List<String> shipmentNos) {
-        if (shipmentNos.isEmpty()) return List.of();
+        if (shipmentNos.isEmpty())
+            return List.of();
         return shipmentNos.stream()
                 .map(no -> shipmentRepository.findByShipmentNo(no).orElse(null))
                 .filter(Objects::nonNull)
@@ -715,7 +770,8 @@ public class ShipmentTransferSessionService {
     private ShipmentTransferSession loadSession(String sessionId) {
         try {
             Object raw = etaRedisTemplate.opsForValue().get(SESSION_KEY + sessionId);
-            if (raw == null) return null;
+            if (raw == null)
+                return null;
             return objectMapper.readValue(raw.toString(), ShipmentTransferSession.class);
         } catch (Exception e) {
             log.error("Failed to deserialise shipment transfer session {}", sessionId, e);
@@ -723,8 +779,30 @@ public class ShipmentTransferSessionService {
         }
     }
 
+    /**
+     * Resolves the long-haul vehicle for a shipment.
+     * Tries shipment.vehicleId first, then falls back to
+     * shipment.vehicleScheduleId → VehicleSchedule.vehicleId.
+     */
+    private Vehicle resolveVehicle(Shipment shipment) {
+        if (shipment.getVehicleId() != null) {
+            Vehicle v = vehicleRepository.findById(shipment.getVehicleId()).orElse(null);
+            if (v != null)
+                return v;
+        }
+        if (shipment.getVehicleScheduleId() != null) {
+            VehicleSchedule schedule = vehicleScheduleRepository
+                    .findById(shipment.getVehicleScheduleId()).orElse(null);
+            if (schedule != null && schedule.getVehicleId() != null) {
+                return vehicleRepository.findById(schedule.getVehicleId()).orElse(null);
+            }
+        }
+        return null;
+    }
+
     private static String maskPhone(String phone) {
-        if (phone == null || phone.length() < 4) return phone;
+        if (phone == null || phone.length() < 4)
+            return phone;
         int n = phone.length();
         return phone.substring(0, Math.min(3, n - 4))
                 + "*".repeat(Math.max(0, n - 7))
