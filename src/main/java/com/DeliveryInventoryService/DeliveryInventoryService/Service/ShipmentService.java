@@ -1,6 +1,7 @@
 package com.DeliveryInventoryService.DeliveryInventoryService.Service;
 
 import com.DeliveryInventoryService.DeliveryInventoryService.DTO.ApiResponse;
+import com.DeliveryInventoryService.DeliveryInventoryService.DTO.CityRouteEtaEntry;
 import com.DeliveryInventoryService.DeliveryInventoryService.DTO.WarehouseDTO.*;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.*;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Parcel.ParcelStatus;
@@ -47,6 +48,7 @@ public class ShipmentService {
     private final ParcelService parcelService;
     private final RiderRepository riderRepository;
     private final ShipmentLegRepository shipmentLegRepository;
+    private final InterCityRouteService interCityRouteService;
     private final ParcelLifecycleProducer lifecycleProducer;
     private final RedisTemplate<String, Object> etaRedisTemplate;
 
@@ -83,23 +85,9 @@ public class ShipmentService {
         shipment = shipmentRepository.save(shipment);
         cacheShipmentStatus(shipment);
 
-        // Record leg 0 — the initial origin→destination hop
-        ShipmentLeg leg = new ShipmentLeg();
-        leg.setShipmentId(shipment.getId());
-        leg.setSequence(0);
-        leg.setFromWarehouseId(origin.getId());
-        leg.setToWarehouseId(dest.getId());
-        leg.setFromCity(origin.getCity());
-        leg.setToCity(dest.getCity());
-        leg.setEstimatedArrival(req.getArrivalTimeEst());
-        leg.setStatus(ShipmentLegStatus.PENDING);
-        if (req.getRiderId() != null) {
-            riderRepository.findById(req.getRiderId()).ifPresent(r -> {
-                leg.setDispatchingRiderId(r.getId());
-                leg.setDispatchingRiderName(r.getName());
-            });
-        }
-        shipmentLegRepository.save(leg);
+        // Build one leg per route segment (multi-hub aware)
+        CityRouteEtaEntry eta = resolveEta(origin.getCity(), dest.getCity());
+        createShipmentLegs(shipment, origin, dest, eta);
 
         // Attach parcels if provided
         if (req.getParcelIds() != null && !req.getParcelIds().isEmpty()) {
@@ -503,5 +491,65 @@ public class ShipmentService {
                 .updatedAt(s.getUpdatedAt())
                 .parcels(parcelList.stream().map(parcelService::toResponse).collect(Collectors.toList()))
                 .build();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // MULTI-LEG CREATION (shared by createShipment + ShipmentAutoCreationJob)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Creates one ShipmentLeg per route segment.
+     *
+     * If the route has intermediate cities (eta.stops.size > 2), a leg is
+     * created for each consecutive city pair: A→B, B→C, etc.
+     * estimatedArrival is set only on the final leg (intermediate legs don't
+     * have per-segment ETAs without a more detailed routing call).
+     */
+    public void createShipmentLegs(Shipment shipment, Warehouse origin, Warehouse dest,
+                                   CityRouteEtaEntry eta) {
+        List<String> stops = (eta != null && eta.getStops() != null && eta.getStops().size() > 2)
+                ? eta.getStops()
+                : List.of(origin.getCity(), dest.getCity());
+
+        for (int i = 0; i < stops.size() - 1; i++) {
+            String fromCity = stops.get(i);
+            String toCity   = stops.get(i + 1);
+            boolean isFirst = (i == 0);
+            boolean isLast  = (i == stops.size() - 2);
+
+            Warehouse fromWh = isFirst ? origin
+                    : warehouseRepository.findByCity(fromCity).stream()
+                            .filter(w -> w.getStatus() == Warehouse.WarehouseStatus.ACTIVE)
+                            .findFirst().orElse(null);
+            Warehouse toWh = isLast ? dest
+                    : warehouseRepository.findByCity(toCity).stream()
+                            .filter(w -> w.getStatus() == Warehouse.WarehouseStatus.ACTIVE)
+                            .findFirst().orElse(null);
+
+            ShipmentLeg leg = new ShipmentLeg();
+            leg.setShipmentId(shipment.getId());
+            leg.setSequence(i);
+            leg.setFromWarehouseId(fromWh != null ? fromWh.getId() : null);
+            leg.setToWarehouseId(toWh != null ? toWh.getId() : null);
+            leg.setFromCity(fromCity);
+            leg.setToCity(toCity);
+            leg.setStatus(ShipmentLegStatus.PENDING);
+            if (isLast) leg.setEstimatedArrival(shipment.getArrivalTimeEst());
+            shipmentLegRepository.save(leg);
+
+            log.info("Shipment {} — leg {} created: {} → {}", shipment.getShipmentNo(), i, fromCity, toCity);
+        }
+    }
+
+    private CityRouteEtaEntry resolveEta(String originCity, String destCity) {
+        if (originCity.equalsIgnoreCase(destCity)) return null;
+        CityRouteEtaEntry cached = interCityRouteService.getCached(originCity, destCity);
+        if (cached != null) return cached;
+        try {
+            return interCityRouteService.computeAndCache(originCity, destCity);
+        } catch (Exception e) {
+            log.warn("ETA computation failed {} → {}: {}", originCity, destCity, e.getMessage());
+            return null;
+        }
     }
 }

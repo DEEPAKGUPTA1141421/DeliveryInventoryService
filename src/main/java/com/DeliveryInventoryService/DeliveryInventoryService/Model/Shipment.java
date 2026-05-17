@@ -26,11 +26,13 @@ public class Shipment {
 
     private String shipmentType; // LONG_HAUL, INTER_HUB, LAST_MILE
 
+    /** Physical vehicle currently transporting this shipment. Null until dispatched; updated as shipment transfers between vehicles. */
     private UUID vehicleId;
 
     /** Rider assigned to physically transport this shipment (set at creation time). */
     private UUID riderId;
 
+    /** Planned schedule this shipment is booked on. Always set at creation/scheduling time. */
     private UUID vehicleScheduleId;
 
     private UUID originWarehouseId;

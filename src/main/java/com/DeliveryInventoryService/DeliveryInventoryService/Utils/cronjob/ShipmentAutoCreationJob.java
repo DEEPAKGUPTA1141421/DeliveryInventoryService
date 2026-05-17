@@ -7,12 +7,15 @@ import com.DeliveryInventoryService.DeliveryInventoryService.Model.Shipment;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Shipment.ShipmentStatus;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Vehicle;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Vehicle.VehicleStatus;
+import com.DeliveryInventoryService.DeliveryInventoryService.Model.VehicleSchedule;
 import com.DeliveryInventoryService.DeliveryInventoryService.Model.Warehouse;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.ParcelRepository;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.ShipmentRepository;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.VehicleRepository;
+import com.DeliveryInventoryService.DeliveryInventoryService.Repository.VehicleScheduleRepository;
 import com.DeliveryInventoryService.DeliveryInventoryService.Repository.WarehouseRepository;
 import com.DeliveryInventoryService.DeliveryInventoryService.Service.InterCityRouteService;
+import com.DeliveryInventoryService.DeliveryInventoryService.Service.ShipmentService;
 import com.DeliveryInventoryService.DeliveryInventoryService.kafka.ParcelLifecycleEvent;
 import com.DeliveryInventoryService.DeliveryInventoryService.kafka.ParcelLifecycleProducer;
 import lombok.RequiredArgsConstructor;
@@ -70,7 +73,9 @@ public class ShipmentAutoCreationJob {
     private final ParcelRepository parcelRepository;
     private final ShipmentRepository shipmentRepository;
     private final VehicleRepository vehicleRepository;
+    private final VehicleScheduleRepository vehicleScheduleRepository;
     private final InterCityRouteService interCityRouteService;
+    private final ShipmentService shipmentService;
     private final ParcelLifecycleProducer lifecycleProducer;
     private final RedisTemplate<String, Object> redisTemplate;
     private final TransactionTemplate txTemplate;
@@ -145,8 +150,10 @@ public class ShipmentAutoCreationJob {
                 double binWeight = bin.stream().mapToDouble(Parcel::getWeightKg).sum();
                 Vehicle vehicle = pickVehicle(binWeight, availableVehicles);
 
-                Shipment shipment = buildShipment(warehouse, dest, vehicle, eta);
+                VehicleSchedule schedule = createSchedule(vehicle, warehouse, dest, binWeight, bin.size(), eta);
+                Shipment shipment = buildShipment(warehouse, dest, schedule, eta);
                 shipment = shipmentRepository.save(shipment);
+                shipmentService.createShipmentLegs(shipment, warehouse, dest, eta);
 
                 for (Parcel p : bin) {
                     p.setShipment(shipment);
@@ -175,19 +182,46 @@ public class ShipmentAutoCreationJob {
         return created;
     }
 
+    // ── VehicleSchedule creator ───────────────────────────────────────────────
+
+    private VehicleSchedule createSchedule(Vehicle vehicle, Warehouse origin, Warehouse dest,
+            double loadKg, int parcelCount, CityRouteEtaEntry eta) {
+        if (vehicle == null) return null;
+
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of(ZONE));
+        ZonedDateTime departure = now.plusMinutes(DEPARTURE_LAG_MINUTES);
+        ZonedDateTime arrival = eta != null
+                ? departure.plusSeconds(eta.getTotalTravelTimeSeconds())
+                : departure.plusHours(8);
+
+        VehicleSchedule schedule = new VehicleSchedule();
+        schedule.setVehicleId(vehicle.getId());
+        schedule.setScheduleType(VehicleSchedule.ScheduleType.ON_DEMAND);
+        schedule.setOriginCity(origin.getCity());
+        schedule.setDestinationCity(dest.getCity());
+        schedule.setOriginLat(origin.getLat());
+        schedule.setOriginLng(origin.getLng());
+        schedule.setDestLat(dest.getLat());
+        schedule.setDestLng(dest.getLng());
+        schedule.setDepartureDateTime(departure);
+        schedule.setArrivalDateTime(arrival);
+        schedule.setCapacityRemainingKg(vehicle.getCapacityKg() - loadKg);
+        schedule.setCapacityRemainingParcels(0);
+        schedule.setStatus(VehicleSchedule.ScheduleStatus.SCHEDULED);
+        return vehicleScheduleRepository.save(schedule);
+    }
+
     // ── Shipment builder ──────────────────────────────────────────────────────
 
     private Shipment buildShipment(Warehouse origin, Warehouse dest,
-            Vehicle vehicle, CityRouteEtaEntry eta) {
+            VehicleSchedule schedule, CityRouteEtaEntry eta) {
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of(ZONE));
-        ZonedDateTime departure = now.plusMinutes(DEPARTURE_LAG_MINUTES);
-        ZonedDateTime arrival = (eta != null)
-                ? departure.plusSeconds(eta.getTotalTravelTimeSeconds())
-                : departure.plusHours(8); // conservative fallback if no route data
+        ZonedDateTime departure = schedule != null ? schedule.getDepartureDateTime() : now.plusMinutes(DEPARTURE_LAG_MINUTES);
+        ZonedDateTime arrival = schedule != null ? schedule.getArrivalDateTime()
+                : (eta != null ? now.plusMinutes(DEPARTURE_LAG_MINUTES).plusSeconds(eta.getTotalTravelTimeSeconds())
+                        : now.plusMinutes(DEPARTURE_LAG_MINUTES).plusHours(8));
 
-        String shipmentType = origin.getCity().equalsIgnoreCase(dest.getCity())
-                ? "LAST_MILE"
-                : "INTER_HUB";
+        String shipmentType = origin.getCity().equalsIgnoreCase(dest.getCity()) ? "LAST_MILE" : "INTER_HUB";
 
         Shipment s = new Shipment();
         s.setShipmentNo(Shipment.generateShipmentNo());
@@ -196,18 +230,14 @@ public class ShipmentAutoCreationJob {
         s.setDestinationWarehouseId(dest.getId());
         s.setOriginCity(origin.getCity());
         s.setDestinationCity(dest.getCity());
-        s.setVehicleId(vehicle != null ? vehicle.getId() : null);
+        s.setVehicleScheduleId(schedule != null ? schedule.getId() : null);
         s.setDepartureTimeEst(departure);
         s.setArrivalTimeEst(arrival);
         if (eta != null) {
             s.setTimeEstimateSeconds(eta.getTotalTravelTimeSeconds());
             s.setCostEstimate(eta.getTotalDistanceKm() * 12); // ₹12/km placeholder
         }
-        s.setStatus(vehicle != null ? ShipmentStatus.ASSIGNED : ShipmentStatus.CREATED);
-        // Auto-assign the rider paired with this vehicle (Vehicle has a OneToOne Rider)
-        if (vehicle != null && vehicle.getRider() != null) {
-            s.setRiderId(vehicle.getRider().getId());
-        }
+        s.setStatus(schedule != null ? ShipmentStatus.ASSIGNED : ShipmentStatus.CREATED);
         return s;
     }
 
